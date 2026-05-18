@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>OpenHarmony 环境监测预警系统</title>
+    <link rel="stylesheet" href="/style.css?v=20260518-v1-demo">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+<header class="topbar">
+    <div>
+        <h1>OpenHarmony 环境监测预警系统</h1>
+        <p>Hi3861 综合实训原型 + Spring Boot + H2 + Web 可视化</p>
+    </div>
+    <div class="actions">
+        <button id="refreshBtn">刷新数据</button>
+        <button id="mockBtn">生成模拟数据</button>
+        <button id="warningBtn">查看预警记录</button>
+        <span class="action-hint">模拟数据仅用于演示，会标记为 MOCK</span>
+    </div>
+</header>
+
+<main class="layout">
+    <section class="metrics">
+        <article class="metric">
+            <span>设备 ID</span>
+            <strong id="deviceId">-</strong>
+        </article>
+        <article class="metric">
+            <span>温度</span>
+            <strong id="temperature">-</strong>
+        </article>
+        <article class="metric">
+            <span>湿度</span>
+            <strong id="humidity">-</strong>
+        </article>
+        <article class="metric">
+            <span>燃气浓度</span>
+            <strong id="gas">-</strong>
+        </article>
+        <article class="metric status-card" id="statusCard">
+            <span>安全状态</span>
+            <strong id="status">-</strong>
+        </article>
+        <article class="metric source-card" id="sourceCard">
+            <span>数据来源</span>
+            <strong id="dataSource">MOCK</strong>
+        </article>
+        <article class="metric">
+            <span>设备连接</span>
+            <strong id="connectionState">基础展示版演示数据</strong>
+        </article>
+    </section>
+
+    <section class="panel">
+        <div class="panel-title">
+            <h2>实时趋势</h2>
+            <span id="chartFallback">如果 Chart.js CDN 无法加载，下方表格仍可用于答辩展示。</span>
+        </div>
+        <div class="charts">
+            <div class="chart-box">
+                <h3>温度变化</h3>
+                <div class="chart-canvas">
+                    <canvas id="temperatureChart"></canvas>
+                </div>
+            </div>
+            <div class="chart-box">
+                <h3>湿度变化</h3>
+                <div class="chart-canvas">
+                    <canvas id="humidityChart"></canvas>
+                </div>
+            </div>
+            <div class="chart-box">
+                <h3>燃气浓度变化</h3>
+                <div class="chart-canvas">
+                    <canvas id="gasChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="grid">
+        <article class="panel">
+            <h2>简单预测</h2>
+            <div class="prediction">
+                <div><span>下一次温度</span><strong id="predTemperature">-</strong></div>
+                <div><span>下一次湿度</span><strong id="predHumidity">-</strong></div>
+                <div><span>下一次燃气</span><strong id="predGas">-</strong></div>
+                <div><span>预测状态</span><strong id="predStatus">-</strong></div>
+            </div>
+        </article>
+        <article class="panel">
+            <h2>联调说明</h2>
+            <p class="note">v1.0 默认使用模拟数据或后端测试数据进行 Web 展示。“生成模拟数据”仅用于综合实训演示，并会标记为 MOCK。真实 Hi3861 串口数据接入将在 v1.1 中实现，MQTT 接入将在 v1.2 中实现。</p>
+        </article>
+    </section>
+
+    <section class="panel">
+        <div class="panel-title">
+            <h2 id="tableTitle">最近 50 条数据</h2>
+            <span id="lastUpdated">未刷新</span>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>设备</th>
+                    <th>温度</th>
+                    <th>湿度</th>
+                    <th>燃气</th>
+                    <th>状态</th>
+                    <th>数据来源</th>
+                    <th>时间</th>
+                </tr>
+                </thead>
+                <tbody id="dataBody"></tbody>
+            </table>
+        </div>
+    </section>
+</main>
+
+<script src="/app.js?v=20260518-v1-demo"></script>
+</body>
+</html>
