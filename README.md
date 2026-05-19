@@ -2,7 +2,7 @@
 
 当前版本：v1.1 智能数据分析增强版
 
-本项目是基于 OpenHarmony Hi3861 的环境监测预警系统 Web 平台。硬件端负责采集温度、湿度、燃气浓度；Spring Boot 后端负责接收、存储、查询、统计、预测、异常检测；Web Dashboard 用于实时展示和答辩演示。
+本项目是基于 OpenHarmony Hi3861 的环境监测预警系统 Web 平台。硬件端负责采集温度、湿度、燃气浓度；Spring Boot 后端负责通过串口实时读取、存储、查询、统计、预测、异常检测；Web Dashboard 用于实时展示和答辩演示。
 
 本仓库当前只包含 Web 平台与 Spring Boot 后端改动，不包含 OpenHarmony 硬件端改动。
 
@@ -13,6 +13,46 @@
 - `/api/sensor-data/mock` 仅用于手动演示，写入数据会明确标记为 `MOCK`。
 - 统计、预测、异常检测默认不使用 `MOCK`。
 - 真实数据不足时接口返回清晰提示，不会用随机数据冒充真实数据。
+- 页面会用中文展示数据来源，例如“真实串口数据（REAL_SERIAL）”“真实 MQTT 数据（REAL_MQTT）”“模拟演示数据（MOCK）”。
+
+## 串口实时接入
+
+当前 Web 平台支持直接读取 Hi3861 串口输出，不修改硬件端代码。
+
+本机已验证参数：
+
+```text
+port: COM21
+baud-rate: 115200
+data-source: REAL_SERIAL
+```
+
+板子当前输出格式示例：
+
+```text
+[Sensor] temperature=30.8C(AHT20), humidity=48.0%(AHT20), gas=46.6ppm(MQ2), status=SAFE
+```
+
+后端只会解析包含 `temperature`、`humidity`、`gas` 的传感器行，保存到 MySQL 的 `sensor_data` 表，并标记为 `REAL_SERIAL`。其他日志行只作为串口状态信息，不会当作传感器数据。
+
+本地配置位于 `src/main/resources/application-local.yml`：
+
+```yaml
+app:
+  serial:
+    enabled: true
+    port-name: COM21
+    baud-rate: 115200
+    reconnect-delay-ms: 3000
+```
+
+公开配置默认不强制启用串口，可通过环境变量开启：
+
+```powershell
+$env:SERIAL_ENABLED="true"
+$env:SERIAL_PORT="COM21"
+$env:SERIAL_BAUD_RATE="115200"
+```
 
 ## MySQL 数据库配置
 
@@ -189,6 +229,7 @@ POST /api/agent/analyze
 GET /api/system/database-status
 GET /api/system/retention-policy
 GET /api/system/cache-status
+GET /api/system/serial-status
 ```
 
 ## 测试命令
@@ -222,6 +263,7 @@ curl "http://localhost:8080/api/anomaly/detect?limit=50&source=REAL_SERIAL"
 curl "http://localhost:8080/api/agent/context?source=REAL_SERIAL"
 curl "http://localhost:8080/api/system/database-status"
 curl "http://localhost:8080/api/system/cache-status"
+curl "http://localhost:8080/api/system/serial-status"
 ```
 
 MySQL 验证：
@@ -247,7 +289,7 @@ SELECT * FROM anomaly_record ORDER BY id DESC LIMIT 10;
 
 ## 下一步
 
-- 接入真实串口桥接程序，将 Hi3861 串口数据写入 `/api/sensor-data`，数据源标记为 `REAL_SERIAL`；
+- 串口实时读取已接入，后续可按实际板子输出格式继续扩展解析字段；
 - 接入 MQTT 数据通道，数据源标记为 `REAL_MQTT`；
 - 为 Agent 接入 Spring AI 或 LangChain4j；
 - 根据真实设备采样频率继续调优预测与异常检测阈值。

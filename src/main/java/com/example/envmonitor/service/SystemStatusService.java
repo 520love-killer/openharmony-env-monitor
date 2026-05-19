@@ -22,6 +22,7 @@ public class SystemStatusService {
     private final AnalyticsSummaryRepository analyticsSummaryRepository;
     private final AnomalyRecordRepository anomalyRecordRepository;
     private final CacheManager cacheManager;
+    private final SerialIngestionService serialIngestionService;
     private final String datasourceUrl;
     private final int rawDays;
     private final int summaryDays;
@@ -36,6 +37,7 @@ public class SystemStatusService {
         AnalyticsSummaryRepository analyticsSummaryRepository,
         AnomalyRecordRepository anomalyRecordRepository,
         CacheManager cacheManager,
+        SerialIngestionService serialIngestionService,
         @Value("${spring.datasource.url:}") String datasourceUrl,
         @Value("${app.retention.raw-days:30}") int rawDays,
         @Value("${app.retention.summary-days:180}") int summaryDays,
@@ -49,6 +51,7 @@ public class SystemStatusService {
         this.analyticsSummaryRepository = analyticsSummaryRepository;
         this.anomalyRecordRepository = anomalyRecordRepository;
         this.cacheManager = cacheManager;
+        this.serialIngestionService = serialIngestionService;
         this.datasourceUrl = datasourceUrl;
         this.rawDays = rawDays;
         this.summaryDays = summaryDays;
@@ -96,6 +99,10 @@ public class SystemStatusService {
         result.put("cacheNames", CacheConfig.CACHE_NAMES);
         result.put("description", "Caffeine local cache is enabled for dashboard analytics APIs");
         return result;
+    }
+
+    public Map<String, Object> serialStatus() {
+        return serialIngestionService.status();
     }
 
     private String databaseName() {

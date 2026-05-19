@@ -34,6 +34,8 @@
 - 已重做 Web Dashboard：实时数据、趋势图、智能统计、预测、异常、Agent、最近 50 条、数据库状态、缓存状态、清理策略。
 - 已更新 README.md 到 v1.1 说明。
 - 已添加 `.playwright-cli/`、本地密钥配置、日志、target 等忽略规则。
+- 已接入 Hi3861 当前串口 `COM21 / 115200`，实时解析 `[Sensor] temperature=... humidity=... gas=...` 行并保存为 `REAL_SERIAL`。
+- 前端数据源已改为中文展示：真实串口数据、真实 MQTT 数据、模拟演示数据、全部数据来源。
 
 ## 已修改文件
 
@@ -108,6 +110,8 @@
 - `GET /api/system/cache-status`：返回 Caffeine、TTL 30 秒、max size 1000、缓存名列表。
 - 空数据源 `REAL_MQTT`：统计、预测、异常接口返回“真实数据不足”，没有报 500。
 - 浏览器验证：`http://localhost:8080` 页面加载成功，控制台 0 error / 0 warning。
+- 串口验证：`GET /api/system/serial-status` 显示 `enabled=true`、`connected=true`、`portName=COM21`、`baudRate=115200`。
+- 实时数据验证：`GET /api/sensor-data/latest?source=REAL_SERIAL` 返回板子实时数据，例如温度约 30.8℃、湿度约 48.0%、燃气约 46.6ppm。
 
 ## 当前是否能编译
 
@@ -157,7 +161,7 @@ http://localhost:8080
 
 ## 还没有完成
 
-- 未接入真实 Hi3861 串口桥接程序。
+- 已接入当前 Hi3861 串口实时读取；如果换 USB 口或串口号变化，需要更新 `app.serial.port-name`。
 - 未接入真实 MQTT。
 - 未接入真实大模型 Agent。
 - 未新增自动化单元测试类。
@@ -197,7 +201,7 @@ git remote -v
 git push
 ```
 
-5. 下一阶段接入真实串口数据时，不修改 OpenHarmony 硬件端，优先新建 Web 平台侧串口桥接/接收模块，把真实数据写入 `/api/sensor-data`，并标记 `REAL_SERIAL`。
+5. 下一阶段如果串口号变化，先执行 `[System.IO.Ports.SerialPort]::GetPortNames()`，再更新 `app.serial.port-name`。
 
 ## 需要执行的常用命令
 
@@ -233,6 +237,7 @@ SELECT * FROM anomaly_record ORDER BY id DESC LIMIT 10;
 - 真实数据不足时要返回提示，不要自动生成随机数据。
 - 新增数据后必须清理统计、预测、异常、Agent、数据库状态相关缓存。
 - 统计、预测、异常接口的 cache key 必须包含 `source` 和 `limit`。
+- 串口读取只解析含 `temperature`、`humidity`、`gas` 的传感器行，其他板子日志不要写入传感器表。
 - 不要修改 OpenHarmony 硬件端代码。
 - 不要使用 MaQueOS、`./run.sh`、`gdb.sh`、QEMU、A18 烧录工具。
 

@@ -29,4 +29,9 @@ public class SystemStatusController {
     public Map<String, Object> cacheStatus() {
         return systemStatusService.cacheStatus();
     }
+
+    @GetMapping("/serial-status")
+    public Map<String, Object> serialStatus() {
+        return systemStatusService.serialStatus();
+    }
 }

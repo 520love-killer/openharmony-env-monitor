@@ -30,6 +30,10 @@
 - [x] 新增数据保留清理定时任务
 - [x] 前端默认数据源改为 `REAL_SERIAL`
 - [x] 前端新增统计、预测、异常、Agent、数据库、缓存、清理策略区域
+- [x] 前端数据源改为中文展示
+- [x] 接入 Hi3861 当前串口 `COM21 / 115200`
+- [x] 串口实时数据保存为 `REAL_SERIAL`
+- [x] 新增 `/api/system/serial-status`
 - [x] README 更新为 v1.1
 - [x] `mvn clean package` 通过
 - [x] Spring Boot local profile 启动成功
@@ -43,7 +47,7 @@
 
 - [x] Git 提交本轮稳定版本
 - [ ] 根据远程仓库情况推送 GitHub
-- [ ] 接入真实 Hi3861 串口数据桥接
+- [x] 接入真实 Hi3861 串口数据桥接
 - [ ] 接入真实 MQTT
 - [ ] 接入真实大模型 Agent
 - [ ] 增加自动化测试类
@@ -58,3 +62,4 @@
 ## 有问题需要修复
 
 - [ ] GitHub 推送失败：连接 github.com:443 超时或被重置，网络恢复后执行 `git push origin main`
+- [ ] 如果板子换到其他 COM 口，需要更新 `app.serial.port-name`

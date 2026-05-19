@@ -1,6 +1,14 @@
 const DEFAULT_SOURCE = 'REAL_SERIAL';
 const WAITING_TEXT = '等待 Hi3861 真实设备数据。';
 
+const SOURCE_LABELS = {
+  REAL_SERIAL: '真实串口数据（REAL_SERIAL）',
+  REAL_MQTT: '真实 MQTT 数据（REAL_MQTT）',
+  MOCK: '模拟演示数据（MOCK）',
+  MANUAL: '手动录入数据（MANUAL）',
+  ALL: '全部数据来源（ALL）',
+};
+
 const api = {
   latest: source => `/api/sensor-data/latest?source=${encodeURIComponent(source)}`,
   recent: source => `/api/sensor-data/recent?limit=50&source=${encodeURIComponent(source)}`,
@@ -13,39 +21,36 @@ const api = {
   databaseStatus: '/api/system/database-status',
   retentionPolicy: '/api/system/retention-policy',
   cacheStatus: '/api/system/cache-status',
+  serialStatus: '/api/system/serial-status',
   mock: '/api/sensor-data/mock',
 };
 
 let currentSource = DEFAULT_SOURCE;
 let charts = {};
 
-const sourceSelect = document.getElementById('sourceSelect');
-const refreshBtn = document.getElementById('refreshBtn');
-const mockBtn = document.getElementById('mockBtn');
-
-sourceSelect.addEventListener('change', async event => {
+document.getElementById('sourceSelect').addEventListener('change', async event => {
   currentSource = event.target.value;
-  setNotice(`已切换数据源：${currentSource}`);
+  setNotice(`已切换数据源：${sourceLabel(currentSource)}`);
   await refreshAll();
 });
 
-refreshBtn.addEventListener('click', async () => {
-  setNotice(`正在刷新 ${currentSource} 数据。`);
+document.getElementById('refreshBtn').addEventListener('click', async () => {
+  setNotice(`正在刷新 ${sourceLabel(currentSource)}。`);
   await refreshAll();
 });
 
-mockBtn.addEventListener('click', async () => {
+document.getElementById('mockBtn').addEventListener('click', async () => {
   try {
     const response = await fetch(api.mock, { method: 'POST' });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
     currentSource = 'MOCK';
-    sourceSelect.value = 'MOCK';
-    setNotice('已手动生成 1 条 MOCK 演示数据。MOCK 不会被当作真实数据。', 'warn');
+    document.getElementById('sourceSelect').value = 'MOCK';
+    setNotice('已手动生成 1 条模拟演示数据。模拟数据不会被当作真实串口数据。', 'warn');
     await refreshAll();
   } catch (error) {
-    setNotice(`生成 MOCK 数据失败：${error.message}`, 'error');
+    setNotice(`生成模拟演示数据失败：${error.message}`, 'error');
   }
 });
 
@@ -66,6 +71,7 @@ async function refreshAll() {
     databaseStatus,
     retentionPolicy,
     cacheStatus,
+    serialStatus,
   ] = await Promise.all([
     getJson(api.latest(currentSource), { hasData: false, message: WAITING_TEXT }),
     getJson(api.recent(currentSource), []),
@@ -77,6 +83,7 @@ async function refreshAll() {
     getJson(api.databaseStatus, {}),
     getJson(api.retentionPolicy, {}),
     getJson(api.cacheStatus, {}),
+    getJson(api.serialStatus, {}),
   ]);
 
   renderLatest(latest);
@@ -89,7 +96,8 @@ async function refreshAll() {
   renderDatabaseStatus(databaseStatus);
   renderRetentionPolicy(retentionPolicy);
   renderCacheStatus(cacheStatus);
-  setText('tableSource', currentSource);
+  renderSerialStatus(serialStatus);
+  setText('tableSource', sourceLabel(currentSource));
   setText('lastUpdated', `刷新时间：${new Date().toLocaleString()}`);
 }
 
@@ -134,7 +142,7 @@ function renderLatest(payload) {
   setText('humidity', formatNumber(data.humidity, 1, '%'));
   setText('gas', formatNumber(data.gas, 1, 'ppm'));
   setText('status', data.status ?? '-');
-  setText('dataSource', source);
+  setText('dataSource', sourceLabel(source));
   setText('latestTime', formatTime(data.createdAt));
   setText('connectionState', connectionText(source));
   updateStatusClass(data.status);
@@ -145,7 +153,7 @@ function renderTable(rows) {
   const body = document.getElementById('dataBody');
   if (!rows.length) {
     const message = currentSource === 'MOCK'
-      ? '暂无 MOCK 演示数据。点击“生成 MOCK 演示数据”后才会出现。'
+      ? '暂无模拟演示数据。点击“生成模拟演示数据”后才会出现。'
       : '等待 Hi3861 真实设备数据。真实数据不足时不会自动生成随机数据。';
     body.innerHTML = `<tr><td colspan="7" class="empty">${escapeHtml(message)}</td></tr>`;
     return;
@@ -282,7 +290,7 @@ function renderAgentContext(context) {
   }
   const quality = context.dataQuality;
   if (quality.hasEnoughRealData === false && currentSource !== 'MOCK') {
-    setNotice('真实数据不足。可以接入 REAL_SERIAL/REAL_MQTT，或手动切换 MOCK 做演示。');
+    setNotice('真实数据不足。请确认串口实时接入状态，或手动切换模拟演示数据。');
   }
 }
 
@@ -320,6 +328,23 @@ function renderDatabaseStatus(data) {
   setText('latestAnomalyTime', formatTime(data.latestAnomalyTime));
 }
 
+function renderSerialStatus(data) {
+  const connected = data.connected === true;
+  setText('serialConnected', data.enabled === false ? '未启用' : connected ? '已连接' : '未连接');
+  setText('serialPort', data.portName ?? '-');
+  setText('serialBaud', data.baudRate ?? '-');
+  setText('serialReceived', data.receivedLines ?? '-');
+  setText('serialSaved', data.savedRecords ?? '-');
+  setText('serialSavedAt', formatTime(data.lastSavedAt));
+  const message = data.lastSavedMessage || data.lastRawMessage || data.lastError || '等待串口数据。';
+  setText('serialLastMessage', message);
+  if (data.enabled && connected && currentSource === 'REAL_SERIAL') {
+    setNotice(`串口 ${data.portName} / ${data.baudRate} 已连接，正在实时写入真实串口数据。`);
+  } else if (data.enabled && data.lastError) {
+    setNotice(`串口接入未成功：${data.lastError}`, 'warn');
+  }
+}
+
 function renderRetentionPolicy(data) {
   setText('retentionRaw', valueWithDays(data.rawDataRetentionDays));
   setText('retentionMock', valueWithDays(data.mockDataRetentionDays));
@@ -339,11 +364,7 @@ function renderCacheStatus(data) {
 }
 
 function insufficient(message) {
-  return {
-    success: false,
-    message,
-    sampleCount: 0,
-  };
+  return { success: false, message, sampleCount: 0 };
 }
 
 function setNotice(message, tone = 'idle') {
@@ -375,7 +396,7 @@ function statusBadge(status) {
 
 function sourceBadge(source) {
   const normalized = normalizeSource(source);
-  return `<span class="badge ${sourceClass(normalized)}">${escapeHtml(normalized)}</span>`;
+  return `<span class="badge ${sourceClass(normalized)}">${escapeHtml(sourceLabel(normalized))}</span>`;
 }
 
 function levelTag(level) {
@@ -384,22 +405,16 @@ function levelTag(level) {
   return `<span class="${cls}">${escapeHtml(normalized)}</span>`;
 }
 
+function sourceLabel(source) {
+  return SOURCE_LABELS[source] || source || '无数据';
+}
+
 function sourceClass(source) {
-  if (source === 'REAL_SERIAL') {
-    return 'source-real-serial';
-  }
-  if (source === 'REAL_MQTT') {
-    return 'source-real-mqtt';
-  }
-  if (source === 'MOCK') {
-    return 'source-mock';
-  }
-  if (source === 'MANUAL') {
-    return 'source-manual';
-  }
-  if (source === 'ALL') {
-    return 'source-all';
-  }
+  if (source === 'REAL_SERIAL') return 'source-real-serial';
+  if (source === 'REAL_MQTT') return 'source-real-mqtt';
+  if (source === 'MOCK') return 'source-mock';
+  if (source === 'MANUAL') return 'source-manual';
+  if (source === 'ALL') return 'source-all';
   return 'source-waiting';
 }
 
@@ -408,21 +423,11 @@ function normalizeSource(source) {
 }
 
 function connectionText(source) {
-  if (source === 'REAL_SERIAL') {
-    return '串口真实数据源';
-  }
-  if (source === 'REAL_MQTT') {
-    return 'MQTT 真实数据源';
-  }
-  if (source === 'MOCK') {
-    return '手动 MOCK 演示数据';
-  }
-  if (source === 'MANUAL') {
-    return '手动录入数据';
-  }
-  if (source === 'ALL') {
-    return '混合数据查询';
-  }
+  if (source === 'REAL_SERIAL') return '真实串口数据源';
+  if (source === 'REAL_MQTT') return '真实 MQTT 数据源';
+  if (source === 'MOCK') return '手动模拟演示数据';
+  if (source === 'MANUAL') return '手动录入数据';
+  if (source === 'ALL') return '混合数据查询';
   return WAITING_TEXT;
 }
 
@@ -443,9 +448,7 @@ function setText(id, value) {
 
 function formatNumber(value, digits = 1, unit = '') {
   const number = Number(value);
-  if (!Number.isFinite(number)) {
-    return '-';
-  }
+  if (!Number.isFinite(number)) return '-';
   return `${number.toFixed(digits)}${unit ? ` ${unit}` : ''}`;
 }
 
@@ -455,13 +458,9 @@ function numberOrNull(value) {
 }
 
 function formatTime(value, short = false) {
-  if (!value) {
-    return '-';
-  }
+  if (!value) return '-';
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
+  if (Number.isNaN(date.getTime())) return value;
   return short ? date.toLocaleTimeString() : date.toLocaleString();
 }
 
@@ -476,4 +475,4 @@ function escapeHtml(value) {
 }
 
 refreshAll();
-setInterval(refreshAll, 10000);
+setInterval(refreshAll, 3000);

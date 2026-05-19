@@ -80,6 +80,22 @@ public class SensorDataService {
     }
 
     @Transactional
+    public Optional<SensorData> createFromSerialMessage(String payload) {
+        try {
+            if (!looksLikeSensorPayload(payload)) {
+                return Optional.empty();
+            }
+            SensorDataRequest request = parsePayload(payload);
+            request.setDataSource(SOURCE_REAL_SERIAL);
+            request.setRawMessage(payload);
+            return Optional.of(create(request));
+        } catch (RuntimeException ex) {
+            System.out.println("[Serial] Ignore invalid payload: " + payload + ", reason=" + ex.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    @Transactional
     public SensorData createMockData() {
         SensorDataRequest request = new SensorDataRequest();
         request.setDeviceId("Hi3861-DeviceA");
@@ -173,6 +189,14 @@ public class SensorDataService {
             return parseJsonPayload(trimmed);
         }
         return parseKeyValuePayload(trimmed);
+    }
+
+    private boolean looksLikeSensorPayload(String payload) {
+        if (!StringUtils.hasText(payload)) {
+            return false;
+        }
+        String text = payload.toLowerCase(Locale.ROOT);
+        return text.contains("temperature") && text.contains("humidity") && text.contains("gas");
     }
 
     private SensorDataRequest parseJsonPayload(String payload) {
