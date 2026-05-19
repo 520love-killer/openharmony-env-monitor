@@ -1,6 +1,6 @@
 # OpenHarmony 环境监测预警系统 Web 平台
 
-当前版本：v1.1 智能数据分析增强版
+当前版本：v2.0 Agent 主页面版
 
 本项目是基于 OpenHarmony Hi3861 的环境监测预警系统 Web 平台。硬件端负责采集温度、湿度、燃气浓度；Spring Boot 后端负责通过串口实时读取、存储、查询、统计、预测、异常检测；Web Dashboard 用于实时展示和答辩演示。
 
@@ -188,11 +188,72 @@ S_t = alpha * X_t + (1 - alpha) * S_{t-1}
 - 每天凌晨 3:00 自动清理；
 - 不删除最近 24 小时数据。
 
+## v2.0 Agent 主页面版
+
+v2.0 将系统从传统环境监测 Dashboard 升级为以 Agent 为核心的智能环境分析平台。
+
+### 主要变化
+
+1. Agent「温度计」成为默认主页面，用户访问 `http://localhost:8080` 直接看到 Agent 对话界面
+2. 数据看板、统计分析、温度预测、异常检测调整为左侧导航次页面
+3. Agent 可自动调用 7 种工具：getLatestSensorData、getRecent50Data、getAnalyticsSummary、getTemperatureForecast、getAnomalyDetection、getDatabaseStatus、generateReportSummary
+4. Agent 可解释使用的算法和预测置信度
+5. Agent 可生成实验报告摘要
+6. 当前支持结构化 RAG + Tool Calling（Mock Agent），不依赖外部 API Key
+7. 后续可升级 LangChain4j / Spring AI / DeepSeek
+8. 新增会话持久化（MySQL），支持多轮对话和历史查询
+
+### 页面结构
+
+```
+左侧导航栏：
+├── 温度计 Agent（默认主页）
+├── 数据看板
+├── 统计分析
+├── 温度预测
+├── 异常检测
+├── 最近数据
+├── 系统状态
+└── 关于项目
+```
+
 ## Agent 扩展
 
-当前使用 Mock Agent，不接入外部大模型 API，不需要 API Key。Mock Agent 会读取统计分析、温度预测和异常检测结果生成解释，不编造数据。
+v2.0 已将 Agent 升级为完整的结构化 RAG + Tool Calling 系统。
 
-后续可替换为 Spring AI、LangChain4j 或大模型 API，并复用 `/api/agent/context` 作为环境分析上下文。
+### Agent 身份
+
+- 名字：**温度计**
+- 角色：环境监测智能助手
+- 能力：分析 Hi3861 采集的温度、湿度、燃气数据，回答环境状态、温度变化、异常风险、预测趋势、算法原理、实验报告和系统故障问题
+
+### 当前实现
+
+Mock Agent 基于真实后端接口结果生成回答，不编造数据：
+- 用户问"最近温度" → 调用 getRecent50Data
+- 用户问"趋势" → 调用 getAnalyticsSummary + getTemperatureForecast
+- 用户问"异常" → 调用 getAnomalyDetection
+- 用户问"算法" → 返回标准算法解释
+- 用户问"报告" → 自动调用所有工具生成报告摘要
+
+### 数据诚实规则
+
+1. 没有 REAL_SERIAL / REAL_MQTT 数据时，Agent 必须说明
+2. 只有 MOCK 数据时，必须说明"当前为模拟数据"
+3. 真实数据不足 5 条时，说明"无法可靠分析"
+4. 不说"精准预测"，只说"短期趋势估计"
+5. 不编造数据库里不存在的数据
+
+### 接入 LLM（可选）
+
+环境变量：
+```
+DEEPSEEK_API_KEY
+DEEPSEEK_BASE_URL
+DEEPSEEK_MODEL
+```
+
+application.yml 已预留 agent 配置段。没有 API Key 时自动使用 Mock Agent，系统正常运行。
 
 ## API 总览
 
@@ -216,11 +277,16 @@ GET /api/forecast/temperature?limit=50&source=REAL_SERIAL
 GET /api/anomaly/detect?limit=50&source=REAL_SERIAL
 ```
 
-Agent：
+Agent（v2.0）：
 
 ```text
-GET  /api/agent/context?source=REAL_SERIAL
-POST /api/agent/analyze
+POST   /api/agent/chat
+GET    /api/agent/context?source=REAL_SERIAL
+GET    /api/agent/sessions
+GET    /api/agent/sessions/{sessionId}
+DELETE /api/agent/sessions/{sessionId}
+POST   /api/agent/report-summary
+POST   /api/agent/explain-algorithm
 ```
 
 系统状态：
@@ -261,6 +327,19 @@ curl "http://localhost:8080/api/analytics/summary?limit=50&source=REAL_SERIAL"
 curl "http://localhost:8080/api/forecast/temperature?limit=50&source=REAL_SERIAL"
 curl "http://localhost:8080/api/anomaly/detect?limit=50&source=REAL_SERIAL"
 curl "http://localhost:8080/api/agent/context?source=REAL_SERIAL"
+curl -X POST http://localhost:8080/api/agent/chat ^
+  -H "Content-Type: application/json" ^
+  -d "{\"message\":\"查看最近50条温度\"}"
+curl -X POST http://localhost:8080/api/agent/chat ^
+  -H "Content-Type: application/json" ^
+  -d "{\"message\":\"请分析当前温度趋势，并告诉我使用了什么算法\"}"
+curl -X POST http://localhost:8080/api/agent/chat ^
+  -H "Content-Type: application/json" ^
+  -d "{\"message\":\"为什么系统报警？\"}"
+curl -X POST http://localhost:8080/api/agent/report-summary ^
+  -H "Content-Type: application/json" ^
+  -d "{\"source\":\"REAL_SERIAL\"}"
+curl "http://localhost:8080/api/agent/sessions"
 curl "http://localhost:8080/api/system/database-status"
 curl "http://localhost:8080/api/system/cache-status"
 curl "http://localhost:8080/api/system/serial-status"
@@ -289,7 +368,10 @@ SELECT * FROM anomaly_record ORDER BY id DESC LIMIT 10;
 
 ## 下一步
 
-- 串口实时读取已接入，后续可按实际板子输出格式继续扩展解析字段；
-- 接入 MQTT 数据通道，数据源标记为 `REAL_MQTT`；
-- 为 Agent 接入 Spring AI 或 LangChain4j；
-- 根据真实设备采样频率继续调优预测与异常检测阈值。
+- [x] 串口实时读取已接入
+- [x] Agent v2.0 结构化 RAG + Tool Calling
+- [x] 7 种 Agent 工具、会话持久化、多轮对话
+- [ ] 接入 MQTT 数据通道
+- [ ] 接入 LangChain4j / Spring AI / DeepSeek LLM
+- [ ] 根据真实设备采样频率调优预测与异常检测阈值
+- [ ] 添加向量数据库（Chroma / Milvus）升级为语义 RAG

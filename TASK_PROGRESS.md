@@ -1,65 +1,66 @@
-# TASK_PROGRESS
+# TASK PROGRESS
 
-## 已完成
+更新时间：2026-05-19 12:30 Asia/Shanghai
 
-- [x] 确认项目根目录与 Spring Boot 结构
-- [x] 检查 MySQL 客户端与 MySQL80 服务
-- [x] 创建 `openharmony_env_monitor` 数据库
-- [x] 配置公开 `application.yml` 使用环境变量占位
-- [x] 创建本地 `application-local.yml`
-- [x] 确认 `application-local.yml` 被 `.gitignore` 忽略
-- [x] 添加 MySQL / JPA / Cache / Caffeine 依赖
-- [x] 启用缓存与定时任务
-- [x] 新增 Caffeine 缓存配置
-- [x] 新增统一缓存清理服务
-- [x] 改造数据源规范，默认查询 `REAL_SERIAL`
-- [x] 保留手动 MOCK，且写入 `dataSource=MOCK`
-- [x] 新增 `AnalyticsSummary` 实体
-- [x] 新增 `AnomalyRecord` 实体
-- [x] 新增统计分析接口
-- [x] 新增趋势判断接口
-- [x] 新增温度预测接口
-- [x] 新增异常检测接口
-- [x] 新增 Agent 上下文接口
-- [x] 新增 Mock Agent 分析接口
-- [x] 新增数据库状态接口
-- [x] 新增缓存状态接口
-- [x] 新增数据保留策略接口
-- [x] 新增统计摘要定时任务
-- [x] 新增异常检测定时任务
-- [x] 新增数据保留清理定时任务
-- [x] 前端默认数据源改为 `REAL_SERIAL`
-- [x] 前端新增统计、预测、异常、Agent、数据库、缓存、清理策略区域
-- [x] 前端数据源改为中文展示
-- [x] 接入 Hi3861 当前串口 `COM21 / 115200`
-- [x] 串口实时数据保存为 `REAL_SERIAL`
-- [x] 新增 `/api/system/serial-status`
-- [x] README 更新为 v1.1
-- [x] `mvn clean package` 通过
-- [x] Spring Boot local profile 启动成功
-- [x] MySQL 表创建成功
-- [x] 手动写入 6 条 `REAL_SERIAL` 接口测试数据
-- [x] 统计、预测、异常、Agent、系统状态接口测试通过
-- [x] 浏览器页面验证通过，控制台 0 error / 0 warning
-- [x] 创建检查点文件
+## v2.0 Agent 主页面版 — 任务进度
 
-## 待完成
+### 已完成
 
-- [x] Git 提交本轮稳定版本
-- [ ] 根据远程仓库情况推送 GitHub
-- [x] 接入真实 Hi3861 串口数据桥接
-- [ ] 接入真实 MQTT
-- [ ] 接入真实大模型 Agent
-- [ ] 增加自动化测试类
+1. [x] 创建 v2.0 DTO（AgentChatRequest, AgentChatResponse, AgentToolResult, AgentContextResponse）
+2. [x] 创建 v2.0 Entity（AgentConversation, AgentMessage, AgentKnowledgeDocument）
+3. [x] 创建 v2.0 Repository（3 个 JPA Repository）
+4. [x] 创建 AgentToolService（7 种工具：getLatestSensorData, getRecent50Data, getAnalyticsSummary, getTemperatureForecast, getAnomalyDetection, getDatabaseStatus, generateReportSummary）
+5. [x] 创建 AgentPromptService（系统提示词 + 算法标准话术）
+6. [x] 创建 AgentRagService（docs 文件检索）
+7. [x] 创建 AgentMemoryService（会话/消息持久化到 MySQL）
+8. [x] 创建 AgentService（主编排服务：工具选择 → 工具执行 → 回答生成）
+9. [x] 重写 AgentController（7 个 API 端点）
+10. [x] 更新 CacheConfig（增加 agentToolResultCache, agentKnowledgeCache）
+11. [x] 重写 index.html（左侧导航 + 8 个页面）
+12. [x] 重写 app.js（多页面切换 + Agent 聊天 + 各次页面数据加载）
+13. [x] 重写 style.css（侧边栏深色布局 + Agent 主页面 + 响应式）
+14. [x] 创建 docs/agent-character-prompt.md
+15. [x] 更新 README.md 到 v2.0
+16. [x] 更新 CHECKPOINT.md
+17. [x] 更新 TASK_PROGRESS.md
+18. [x] mvn clean package 编译通过
 
-## 未测试
+### 待完成
 
-- [ ] Redis 可选配置
-- [ ] 大量历史数据下的查询性能
-- [ ] 真实串口高频写入下的缓存清理表现
-- [ ] 生产部署环境变量配置
+19. [ ] 启动项目验证（需要 MySQL）
+20. [ ] 测试 Agent /api/agent/chat
+21. [ ] 测试前端 Agent 页面
+22. [ ] 测试各次页面数据加载
+23. [ ] Git commit
+24. [ ] Git push
+25. [ ] 可选：创建 v2.0 tag
 
-## 有问题需要修复
+### Agent API 清单
 
-- [ ] GitHub 推送失败：连接 github.com:443 超时或被重置，网络恢复后执行 `git push origin main`
-- [ ] 如果板子换到其他 COM 口，需要更新 `app.serial.port-name`
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | /api/agent/chat | 对话 |
+| GET | /api/agent/context?source= | Agent 上下文 |
+| GET | /api/agent/sessions | 会话列表 |
+| GET | /api/agent/sessions/{id} | 会话消息 |
+| DELETE | /api/agent/sessions/{id} | 删除会话 |
+| POST | /api/agent/report-summary | 生成报告摘要 |
+| POST | /api/agent/explain-algorithm | 解释算法 |
+
+### Agent 工具清单
+
+| 工具名 | 触发条件 | 说明 |
+|--------|----------|------|
+| getLatestSensorData | 提及"最新""当前""实时" | 获取最新传感器数据 |
+| getRecent50Data | 提及"最近""温度列表""最近50" | 最近 50 条数据 |
+| getAnalyticsSummary | 提及"分析""趋势""统计""平均" | 统计分析摘要 |
+| getTemperatureForecast | 提及"预测""未来""5分钟""10分钟" | 温度趋势预测 |
+| getAnomalyDetection | 提及"异常""报警""风险""原因" | 异常风险检测 |
+| getDatabaseStatus | 提及"系统""状态""数据库""缓存" | 数据库状态 |
+| generateReportSummary | 提及"报告""摘要""总结" | 自动调用所有工具生成报告 |
+
+### 数据库新增表
+
+- `agent_conversation`：会话记录（session_id, title, created_at, updated_at）
+- `agent_message`：消息记录（session_id, role, content, used_tools, data_source, confidence, created_at）
+- `agent_knowledge_document`：知识文档（title, path, content, type, created_at, updated_at）

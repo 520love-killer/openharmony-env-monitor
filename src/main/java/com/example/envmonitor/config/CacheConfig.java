@@ -21,6 +21,8 @@ public class CacheConfig {
         "forecastCache",
         "anomalyCache",
         "agentContextCache",
+        "agentToolResultCache",
+        "agentKnowledgeCache",
         "databaseStatusCache"
     );
 

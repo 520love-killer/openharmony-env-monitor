@@ -40,3 +40,10 @@ app:
     port-name: ${SERIAL_PORT:COM21}
     baud-rate: ${SERIAL_BAUD_RATE:115200}
     reconnect-delay-ms: ${SERIAL_RECONNECT_DELAY_MS:3000}
+
+agent:
+  mode: ${AGENT_MODE:mock}
+  provider: ${AGENT_PROVIDER:mock}
+  model: ${DEEPSEEK_MODEL:deepseek-chat}
+  api-key: ${DEEPSEEK_API_KEY:}
+  base-url: ${DEEPSEEK_BASE_URL:}

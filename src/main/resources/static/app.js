@@ -1,4 +1,5 @@
 const DEFAULT_SOURCE = 'REAL_SERIAL';
+const AGENT_NAME = '温度计';
 const WAITING_TEXT = '等待 Hi3861 真实设备数据。';
 
 const SOURCE_LABELS = {
@@ -10,14 +11,16 @@ const SOURCE_LABELS = {
 };
 
 const api = {
-  latest: source => `/api/sensor-data/latest?source=${encodeURIComponent(source)}`,
-  recent: source => `/api/sensor-data/recent?limit=50&source=${encodeURIComponent(source)}`,
-  summary: source => `/api/analytics/summary?limit=50&source=${encodeURIComponent(source)}`,
-  trend: source => `/api/analytics/trend?limit=50&source=${encodeURIComponent(source)}`,
-  forecast: source => `/api/forecast/temperature?limit=50&source=${encodeURIComponent(source)}`,
-  anomaly: source => `/api/anomaly/detect?limit=50&source=${encodeURIComponent(source)}`,
-  agentContext: source => `/api/agent/context?source=${encodeURIComponent(source)}`,
-  agentAnalyze: '/api/agent/analyze',
+  latest: s => `/api/sensor-data/latest?source=${encodeURIComponent(s)}`,
+  recent: s => `/api/sensor-data/recent?limit=50&source=${encodeURIComponent(s)}`,
+  summary: s => `/api/analytics/summary?limit=50&source=${encodeURIComponent(s)}`,
+  trend: s => `/api/analytics/trend?limit=50&source=${encodeURIComponent(s)}`,
+  forecast: s => `/api/forecast/temperature?limit=50&source=${encodeURIComponent(s)}`,
+  anomaly: s => `/api/anomaly/detect?limit=50&source=${encodeURIComponent(s)}`,
+  agentChat: '/api/agent/chat',
+  agentContext: s => `/api/agent/context?source=${encodeURIComponent(s)}`,
+  agentSessions: '/api/agent/sessions',
+  agentSession: id => `/api/agent/sessions/${encodeURIComponent(id)}`,
   databaseStatus: '/api/system/database-status',
   retentionPolicy: '/api/system/retention-policy',
   cacheStatus: '/api/system/cache-status',
@@ -26,166 +29,351 @@ const api = {
 };
 
 let currentSource = DEFAULT_SOURCE;
+let currentPage = 'agent';
+let currentSessionId = null;
 let charts = {};
+let chatHistory = [];
 
-document.getElementById('sourceSelect').addEventListener('change', async event => {
-  currentSource = event.target.value;
-  setNotice(`已切换数据源：${sourceLabel(currentSource)}`);
-  await refreshAll();
+// ====== Page Navigation ======
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', () => switchPage(item.dataset.page));
 });
 
-document.getElementById('refreshBtn').addEventListener('click', async () => {
-  setNotice(`正在刷新 ${sourceLabel(currentSource)}。`);
-  await refreshAll();
+document.getElementById('sourceSelect').addEventListener('change', async e => {
+  currentSource = e.target.value;
+  await refreshCurrentPage();
 });
 
-document.getElementById('mockBtn').addEventListener('click', async () => {
-  try {
-    const response = await fetch(api.mock, { method: 'POST' });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    currentSource = 'MOCK';
-    document.getElementById('sourceSelect').value = 'MOCK';
-    setNotice('已手动生成 1 条模拟演示数据。模拟数据不会被当作真实串口数据。', 'warn');
-    await refreshAll();
-  } catch (error) {
-    setNotice(`生成模拟演示数据失败：${error.message}`, 'error');
+function switchPage(page) {
+  currentPage = page;
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.querySelector(`.nav-item[data-page="${page}"]`)?.classList.add('active');
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(`page-${page}`)?.classList.add('active');
+  refreshCurrentPage();
+}
+
+async function refreshCurrentPage() {
+  switch (currentPage) {
+    case 'agent': refreshAgentContext(); break;
+    case 'dashboard': await refreshDashboard(); break;
+    case 'statistics': await refreshStatistics(); break;
+    case 'forecast': await refreshForecast(); break;
+    case 'anomaly': await refreshAnomaly(); break;
+    case 'recent': await refreshRecent(); break;
+    case 'system': await refreshSystem(); break;
+    case 'about': break;
   }
+}
+
+// ====== Agent Page ======
+document.getElementById('chatSendBtn').addEventListener('click', sendChat);
+document.getElementById('chatInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
+});
+document.getElementById('chatClearBtn').addEventListener('click', clearChat);
+
+document.querySelectorAll('.quick-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.getElementById('chatInput').value = btn.dataset.question;
+    sendChat();
+  });
 });
 
-document.getElementById('agentAnalyzeBtn').addEventListener('click', () => runAgent('请分析当前环境是否安全'));
-document.getElementById('agentForecastBtn').addEventListener('click', () => runAgent('请解释当前温度预测结果'));
-document.getElementById('agentAnomalyBtn').addEventListener('click', () => runAgent('请解释当前异常风险原因'));
-document.getElementById('agentReportBtn').addEventListener('click', () => runAgent('请生成实验报告摘要'));
+async function sendChat() {
+  const input = document.getElementById('chatInput');
+  const message = input.value.trim();
+  if (!message) return;
+  input.value = '';
 
-async function refreshAll() {
-  const [
-    latest,
-    recent,
-    summary,
-    trend,
-    forecast,
-    anomaly,
-    agentContext,
-    databaseStatus,
-    retentionPolicy,
-    cacheStatus,
-    serialStatus,
-  ] = await Promise.all([
+  addChatMessage('user', message);
+  addChatMessage('agent', '温度计 正在分析...', true);
+
+  try {
+    const resp = await fetch(api.agentChat, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: currentSessionId, message, source: currentSource }),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+
+    removeTypingIndicator();
+    currentSessionId = data.sessionId;
+    addChatMessage('agent', data.answer, false, data.usedTools, data.dataSource, data.confidence);
+    updateAgentStatus(data.dataSource);
+    updateSidebarStatus(data.dataSource, data.confidence);
+  } catch (err) {
+    removeTypingIndicator();
+    addChatMessage('agent', `请求失败：${err.message}`, false, [], '', '');
+  }
+}
+
+function addChatMessage(role, content, isTyping, tools, source, confidence) {
+  const container = document.getElementById('chatMessages');
+  const div = document.createElement('div');
+  div.className = `chat-message chat-${role}${isTyping ? ' typing' : ''}`;
+  let html = `<div class="chat-bubble">${escapeHtml(content).replace(/\n/g, '<br>')}</div>`;
+  if (tools && tools.length) {
+    html += `<div class="chat-tools">${tools.map(t => `<span>${escapeHtml(t)}</span>`).join('')}</div>`;
+  }
+  if (source && role === 'agent') {
+    html += `<div class="chat-meta">数据来源：${escapeHtml(source)}${confidence ? ' | 置信度：' + escapeHtml(confidence) : ''}</div>`;
+  }
+  div.innerHTML = html;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+  chatHistory.push({ role, content });
+}
+
+function removeTypingIndicator() {
+  const typing = document.querySelector('.chat-message.typing');
+  if (typing) typing.remove();
+}
+
+function clearChat() {
+  currentSessionId = null;
+  chatHistory = [];
+  document.getElementById('chatMessages').innerHTML = `
+    <div class="chat-welcome">
+      <p>👋 你好！我是 <strong>温度计</strong>，你的环境监测智能助手。</p>
+      <p>请选择一个快捷问题，或直接输入你的问题。</p>
+      <p class="chat-note">会话已清空。</p>
+    </div>`;
+}
+
+function updateAgentStatus(source) {
+  const dot = document.getElementById('agentOnlineStatus');
+  const text = document.getElementById('agentStatusText');
+  const mode = document.getElementById('agentMode');
+  if (source === 'MOCK') {
+    dot.className = 'status-dot warning';
+    text.textContent = '模拟数据模式';
+    mode.textContent = 'Mock Agent';
+  } else if (source === 'REAL_SERIAL' || source === 'REAL_MQTT') {
+    dot.className = 'status-dot online';
+    text.textContent = '在线';
+    mode.textContent = 'Mock Agent (结构化 RAG)';
+  } else {
+    dot.className = 'status-dot offline';
+    text.textContent = '等待数据';
+    mode.textContent = 'Mock Agent';
+  }
+}
+
+function updateSidebarStatus(source, confidence) {
+  const el = document.getElementById('sidebarStatus');
+  if (source === 'MOCK') {
+    el.innerHTML = '📡 模拟数据 | ' + (confidence || 'LOW');
+  } else if (source === 'REAL_SERIAL') {
+    el.innerHTML = '🟢 串口数据 | ' + (confidence || '...');
+  } else if (source === 'REAL_MQTT') {
+    el.innerHTML = '🟢 MQTT 数据 | ' + (confidence || '...');
+  } else {
+    el.textContent = '等待数据...';
+  }
+}
+
+async function refreshAgentContext() {
+  try {
+    const ctx = await getJson(api.agentContext(currentSource), {});
+    if (ctx.hasEnoughRealData === false && currentSource !== 'MOCK') {
+      document.getElementById('dataSourceNotice').innerHTML =
+        '<p style="color:#b7791f">真实数据不足 5 条。请确认 Hi3861 串口已连接，或切换到模拟数据。</p>';
+    }
+    updateAgentStatus(currentSource);
+  } catch (e) { /* ignore */ }
+}
+
+// ====== Dashboard Page ======
+async function refreshDashboard() {
+  const [latest, recent] = await Promise.all([
     getJson(api.latest(currentSource), { hasData: false, message: WAITING_TEXT }),
     getJson(api.recent(currentSource), []),
-    getJson(api.summary(currentSource), insufficient('等待统计分析结果')),
+  ]);
+  renderDashboardMetrics(latest);
+  renderCharts(Array.isArray(recent) ? [...recent].reverse() : []);
+}
+
+function renderDashboardMetrics(payload) {
+  const data = payload?.data;
+  const hasData = payload?.hasData === true && data;
+  const source = hasData ? (data.dataSource || currentSource) : currentSource;
+  const grid = document.getElementById('metricGrid');
+  if (!hasData) {
+    grid.innerHTML = `<div class="metric-card"><span>状态</span><strong>${WAITING_TEXT}</strong></div>`;
+    return;
+  }
+  grid.innerHTML = `
+    <div class="metric-card"><span>设备 ID</span><strong>${esc(data.deviceId)}</strong></div>
+    <div class="metric-card"><span>温度</span><strong>${fmt(data.temperature, 1, '℃')}</strong></div>
+    <div class="metric-card"><span>湿度</span><strong>${fmt(data.humidity, 1, '%')}</strong></div>
+    <div class="metric-card"><span>燃气浓度</span><strong>${fmt(data.gas, 1, 'ppm')}</strong></div>
+    <div class="metric-card"><span>安全状态</span><strong class="${data.status === 'WARNING' ? 'warning-text' : 'safe-text'}">${esc(data.status)}</strong></div>
+    <div class="metric-card"><span>数据来源</span><strong>${sourceLabel(source)}</strong></div>
+    <div class="metric-card"><span>更新时间</span><strong>${fmt(data.createdAt)}</strong></div>
+    <div class="metric-card"><span>设备连接</span><strong>${source === 'MOCK' ? '模拟演示数据' : 'Hi3861 真实设备'}</strong></div>
+  `;
+}
+
+// ====== Statistics Page ======
+async function refreshStatistics() {
+  const [summary, trend] = await Promise.all([
+    getJson(api.summary(currentSource), { success: false, message: '等待统计分析结果' }),
     getJson(api.trend(currentSource), { success: false, message: '等待趋势分析结果' }),
-    getJson(api.forecast(currentSource), { success: false, message: '等待预测结果' }),
-    getJson(api.anomaly(currentSource), { success: false, message: '等待异常检测结果', items: [] }),
-    getJson(api.agentContext(currentSource), {}),
+  ]);
+  const ok = summary?.success === true;
+  document.getElementById('statMessage').textContent = summary?.message ?? '等待统计分析结果';
+  document.getElementById('statGrid').innerHTML = ok ? `
+    <div class="stat-card"><span>样本数</span><strong>${summary.sampleCount}</strong></div>
+    <div class="stat-card"><span>平均温度</span><strong>${fmt(summary.temperatureAvg, 2, '℃')}</strong></div>
+    <div class="stat-card"><span>最高温度</span><strong>${fmt(summary.temperatureMax, 2, '℃')}</strong></div>
+    <div class="stat-card"><span>最低温度</span><strong>${fmt(summary.temperatureMin, 2, '℃')}</strong></div>
+    <div class="stat-card"><span>温度标准差</span><strong>${fmt(summary.temperatureStd, 2)}</strong></div>
+    <div class="stat-card"><span>平均湿度</span><strong>${fmt(summary.humidityAvg, 2, '%')}</strong></div>
+    <div class="stat-card"><span>燃气最大值</span><strong>${fmt(summary.gasMax, 2, 'ppm')}</strong></div>
+    <div class="stat-card"><span>波动程度</span><strong>${esc(summary.volatilityLevel)}</strong></div>
+    <div class="stat-card"><span>温度变化率</span><strong>${fmt(summary.temperatureChangeRate, 3, '℃/min')}</strong></div>
+    <div class="stat-card"><span>湿度变化率</span><strong>${fmt(summary.humidityChangeRate, 3, '%/min')}</strong></div>
+    <div class="stat-card"><span>燃气变化率</span><strong>${fmt(summary.gasChangeRate, 3, 'ppm/min')}</strong></div>
+    <div class="stat-card"><span>整体趋势</span><strong>${esc(summary.trend)}</strong></div>
+  ` : `<div class="metric-card"><span>状态</span><strong>数据不足</strong></div>`;
+
+  const trendOk = trend?.success === true;
+  document.getElementById('trendStrip').innerHTML = trendOk ? `
+    <span>温度趋势：<strong>${esc(trend.temperatureTrend)}</strong></span>
+    <span>湿度趋势：<strong>${esc(trend.humidityTrend)}</strong></span>
+    <span>燃气趋势：<strong>${esc(trend.gasTrend)}</strong></span>
+    <span>综合解释：<strong>${esc(trend.explanation)}</strong></span>
+  ` : '';
+}
+
+// ====== Forecast Page ======
+async function refreshForecast() {
+  const data = await getJson(api.forecast(currentSource), { success: false, message: '等待预测结果' });
+  const ok = data?.success === true;
+  document.getElementById('forecastMessage').textContent = data?.message ?? '等待预测结果';
+  document.getElementById('forecastGrid').innerHTML = ok ? `
+    <div class="stat-card"><span>当前温度</span><strong>${fmt(data.currentTemperature, 2, '℃')}</strong></div>
+    <div class="stat-card"><span>未来 5 分钟</span><strong>${fmt(data.finalForecast5min, 2, '℃')}</strong></div>
+    <div class="stat-card"><span>未来 10 分钟</span><strong>${fmt(data.finalForecast10min, 2, '℃')}</strong></div>
+    <div class="stat-card"><span>趋势</span><strong>${esc(data.trend)}</strong></div>
+    <div class="stat-card"><span>置信度</span><strong>${esc(data.confidence)}</strong></div>
+    <div class="stat-card"><span>样本数</span><strong>${data.sampleCount}</strong></div>
+  ` : `<div class="metric-card"><span>状态</span><strong>数据不足</strong></div>`;
+
+  document.getElementById('algorithmTable').innerHTML = ok ? `
+    <div><span>滑动平均 5/10 分钟</span><strong>${fmt(data.movingAverageForecast5min, 2, '℃')} / ${fmt(data.movingAverageForecast10min, 2, '℃')}</strong></div>
+    <div><span>线性回归 5/10 分钟</span><strong>${fmt(data.linearRegressionForecast5min, 2, '℃')} / ${fmt(data.linearRegressionForecast10min, 2, '℃')}</strong></div>
+    <div><span>指数平滑 5/10 分钟</span><strong>${fmt(data.exponentialSmoothingForecast5min, 2, '℃')} / ${fmt(data.exponentialSmoothingForecast10min, 2, '℃')}</strong></div>
+  ` : '';
+}
+
+// ====== Anomaly Page ======
+async function refreshAnomaly() {
+  const data = await getJson(api.anomaly(currentSource), { success: false, message: '等待异常检测结果', items: [] });
+  const ok = data?.success === true;
+  const items = Array.isArray(data?.items) ? data.items : [];
+  document.getElementById('anomalySummary').innerHTML = ok
+    ? `<span class="tag ${data.hasAnomaly ? 'tag-high' : 'tag-safe'}">${data.hasAnomaly ? '存在异常' : '未发现异常'}</span>
+       <strong>${data.anomalyCount} 个异常</strong>
+       <p>${esc(data.message)}</p>`
+    : `<span class="tag tag-muted">数据不足</span><strong>0 个异常</strong><p>${esc(data.message)}</p>`;
+
+  document.getElementById('anomalyList').innerHTML = items.length
+    ? items.map(item => `
+      <article class="anomaly-item">
+        <div class="anomaly-head"><strong>${esc(item.type)}</strong><span class="tag tag-${(item.level || 'low').toLowerCase()}">${esc(item.level)}</span></div>
+        <p>${esc(item.reason)}</p>
+        <span>${fmt(item.time)}</span>
+        <em>${esc(item.suggestion)}</em>
+      </article>`).join('')
+    : '<div class="empty-box">暂无异常记录</div>';
+}
+
+// ====== Recent Data Page ======
+async function refreshRecent() {
+  const rows = await getJson(api.recent(currentSource), []);
+  document.getElementById('recentSource').textContent = sourceLabel(currentSource);
+  document.getElementById('recentBody').innerHTML = rows.length
+    ? rows.map(row => `
+      <tr>
+        <td>${esc(fmt(row.createdAt))}</td>
+        <td>${esc(row.deviceId)}</td>
+        <td>${fmt(row.temperature, 1, '℃')}</td>
+        <td>${fmt(row.humidity, 1, '%')}</td>
+        <td>${fmt(row.gas, 1, 'ppm')}</td>
+        <td><span class="badge ${row.status === 'WARNING' ? 'badge-warning' : 'badge-safe'}">${esc(row.status)}</span></td>
+        <td><span class="badge">${sourceLabel(row.dataSource || currentSource)}</span></td>
+      </tr>`).join('')
+    : '<tr><td colspan="7" class="empty">等待 Hi3861 真实设备数据。</td></tr>';
+}
+
+// ====== System Page ======
+async function refreshSystem() {
+  const [db, retention, cache, serial] = await Promise.all([
     getJson(api.databaseStatus, {}),
     getJson(api.retentionPolicy, {}),
     getJson(api.cacheStatus, {}),
     getJson(api.serialStatus, {}),
   ]);
-
-  renderLatest(latest);
-  renderTable(Array.isArray(recent) ? recent : []);
-  renderCharts(Array.isArray(recent) ? [...recent].reverse() : []);
-  renderSummary(summary, trend);
-  renderForecast(forecast);
-  renderAnomaly(anomaly);
-  renderAgentContext(agentContext);
-  renderDatabaseStatus(databaseStatus);
-  renderRetentionPolicy(retentionPolicy);
-  renderCacheStatus(cacheStatus);
-  renderSerialStatus(serialStatus);
-  setText('tableSource', sourceLabel(currentSource));
-  setText('lastUpdated', `刷新时间：${new Date().toLocaleString()}`);
+  document.getElementById('systemGrid').innerHTML = `
+    <div class="system-card">
+      <h3>数据库状态</h3>
+      <dl>
+        <div><dt>MySQL 连接</dt><dd>${db.connected ? '已连接' : '未确认'}</dd></div>
+        <div><dt>数据库名</dt><dd>${esc(db.database)}</dd></div>
+        <div><dt>sensor_data 总数</dt><dd>${db.sensorDataCount ?? '-'}</dd></div>
+        <div><dt>真实串口数量</dt><dd>${db.realSerialCount ?? '-'}</dd></div>
+        <div><dt>真实 MQTT 数量</dt><dd>${db.realMqttCount ?? '-'}</dd></div>
+        <div><dt>模拟演示数量</dt><dd>${db.mockCount ?? '-'}</dd></div>
+      </dl>
+    </div>
+    <div class="system-card">
+      <h3>串口实时接入</h3>
+      <dl>
+        <div><dt>接入状态</dt><dd>${serial.connected ? '已连接' : '未连接'}</dd></div>
+        <div><dt>串口号</dt><dd>${esc(serial.portName)}</dd></div>
+        <div><dt>波特率</dt><dd>${serial.baudRate ?? '-'}</dd></div>
+        <div><dt>已接收行数</dt><dd>${serial.receivedLines ?? '-'}</dd></div>
+        <div><dt>已保存记录</dt><dd>${serial.savedRecords ?? '-'}</dd></div>
+      </dl>
+    </div>
+    <div class="system-card">
+      <h3>缓存状态</h3>
+      <dl>
+        <div><dt>缓存技术栈</dt><dd>${esc(cache.provider)}</dd></div>
+        <div><dt>缓存状态</dt><dd>${cache.enabled ? '已启用' : '未启用'}</dd></div>
+        <div><dt>缓存 TTL</dt><dd>${cache.ttlSeconds ?? '-'} 秒</dd></div>
+        <div><dt>最大数量</dt><dd>${cache.maxSize ?? '-'}</dd></div>
+      </dl>
+      <div class="tool-tags">${(Array.isArray(cache.cacheNames) ? cache.cacheNames : []).map(n => `<span>${esc(n)}</span>`).join('')}</div>
+    </div>
+    <div class="system-card">
+      <h3>数据清理策略</h3>
+      <dl>
+        <div><dt>真实原始数据</dt><dd>${retention.rawDataRetentionDays ?? '-'} 天</dd></div>
+        <div><dt>模拟演示数据</dt><dd>${retention.mockDataRetentionDays ?? '-'} 天</dd></div>
+        <div><dt>统计摘要</dt><dd>${retention.summaryRetentionDays ?? '-'} 天</dd></div>
+        <div><dt>异常记录</dt><dd>${retention.anomalyRetentionDays ?? '-'} 天</dd></div>
+        <div><dt>清理时间</dt><dd>${esc(retention.cleanupCron)}</dd></div>
+      </dl>
+    </div>
+  `;
 }
 
-async function getJson(url, fallback) {
-  try {
-    const response = await fetch(url);
-    if (response.status === 204) {
-      return fallback;
-    }
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    return await response.json();
-  } catch (error) {
-    console.warn(`request failed: ${url}`, error);
-    return fallback;
-  }
-}
-
-function renderLatest(payload) {
-  const data = payload?.data;
-  const hasData = payload?.hasData === true && data;
-  const source = normalizeSource(hasData ? data.dataSource : payload?.dataSource ?? currentSource);
-
-  if (!hasData) {
-    setText('deviceId', '-');
-    setText('temperature', '-');
-    setText('humidity', '-');
-    setText('gas', '-');
-    setText('status', '-');
-    setText('dataSource', '无数据');
-    setText('latestTime', '-');
-    setText('connectionState', payload?.message ?? WAITING_TEXT);
-    setNotice(payload?.message ?? WAITING_TEXT, source === 'MOCK' ? 'warn' : 'idle');
-    updateStatusClass('UNKNOWN');
-    updateSourceClass(source);
-    return;
-  }
-
-  setText('deviceId', data.deviceId ?? '-');
-  setText('temperature', formatNumber(data.temperature, 1, '℃'));
-  setText('humidity', formatNumber(data.humidity, 1, '%'));
-  setText('gas', formatNumber(data.gas, 1, 'ppm'));
-  setText('status', data.status ?? '-');
-  setText('dataSource', sourceLabel(source));
-  setText('latestTime', formatTime(data.createdAt));
-  setText('connectionState', connectionText(source));
-  updateStatusClass(data.status);
-  updateSourceClass(source);
-}
-
-function renderTable(rows) {
-  const body = document.getElementById('dataBody');
-  if (!rows.length) {
-    const message = currentSource === 'MOCK'
-      ? '暂无模拟演示数据。点击“生成模拟演示数据”后才会出现。'
-      : '等待 Hi3861 真实设备数据。真实数据不足时不会自动生成随机数据。';
-    body.innerHTML = `<tr><td colspan="7" class="empty">${escapeHtml(message)}</td></tr>`;
-    return;
-  }
-
-  body.innerHTML = rows.map(row => `
-    <tr>
-      <td>${escapeHtml(formatTime(row.createdAt))}</td>
-      <td>${escapeHtml(row.deviceId ?? '-')}</td>
-      <td>${escapeHtml(formatNumber(row.temperature, 1, '℃'))}</td>
-      <td>${escapeHtml(formatNumber(row.humidity, 1, '%'))}</td>
-      <td>${escapeHtml(formatNumber(row.gas, 1, 'ppm'))}</td>
-      <td>${statusBadge(row.status)}</td>
-      <td>${sourceBadge(row.dataSource)}</td>
-    </tr>
-  `).join('');
-}
-
+// ====== Charts ======
 function renderCharts(rows) {
-  if (!window.Chart) {
-    document.getElementById('chartFallback').style.display = 'inline';
-    return;
-  }
-  document.getElementById('chartFallback').style.display = 'none';
-  const labels = rows.map(row => formatTime(row.createdAt, true));
-  drawChart('temperatureChart', 'temperature', labels, rows.map(row => numberOrNull(row.temperature)), '#c2410c', '温度');
-  drawChart('humidityChart', 'humidity', labels, rows.map(row => numberOrNull(row.humidity)), '#0369a1', '湿度');
-  drawChart('gasChart', 'gas', labels, rows.map(row => numberOrNull(row.gas)), '#7c3aed', '燃气');
+  if (!window.Chart) return;
+  const labels = rows.map(row => fmt(row.createdAt, true));
+  drawChart('temperatureChart', 'temperature', labels, rows.map(r => num(r.temperature)), '#ef4444', '温度');
+  drawChart('humidityChart', 'humidity', labels, rows.map(r => num(r.humidity)), '#3b82f6', '湿度');
+  drawChart('gasChart', 'gas', labels, rows.map(r => num(r.gas)), '#8b5cf6', '燃气');
 }
 
 function drawChart(canvasId, key, labels, values, color, label) {
   const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
   if (charts[key]) {
     charts[key].data.labels = labels;
     charts[key].data.datasets[0].data = values;
@@ -194,285 +382,32 @@ function drawChart(canvasId, key, labels, values, color, label) {
   }
   charts[key] = new Chart(canvas, {
     type: 'line',
-    data: {
-      labels,
-      datasets: [{
-        label,
-        data: values,
-        borderColor: color,
-        backgroundColor: `${color}1f`,
-        borderWidth: 2,
-        pointRadius: 2,
-        tension: 0.28,
-        fill: true,
-      }],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { ticks: { maxTicksLimit: 6 } },
-        y: { beginAtZero: false },
-      },
-    },
+    data: { labels, datasets: [{ label, data: values, borderColor: color, backgroundColor: `${color}1f`, borderWidth: 2, pointRadius: 2, tension: 0.28, fill: true }] },
+    options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { maxTicksLimit: 6 } }, y: { beginAtZero: false } } },
   });
 }
 
-function renderSummary(summary, trend) {
-  const ok = summary?.success === true;
-  setText('summaryMessage', summary?.message ?? '等待统计分析结果');
-  setText('summarySampleCount', ok ? summary.sampleCount : '-');
-  setText('temperatureAvg', ok ? formatNumber(summary.temperatureAvg, 2, '℃') : '-');
-  setText('temperatureMax', ok ? formatNumber(summary.temperatureMax, 2, '℃') : '-');
-  setText('temperatureMin', ok ? formatNumber(summary.temperatureMin, 2, '℃') : '-');
-  setText('temperatureStd', ok ? formatNumber(summary.temperatureStd, 2) : '-');
-  setText('humidityAvg', ok ? formatNumber(summary.humidityAvg, 2, '%') : '-');
-  setText('gasMax', ok ? formatNumber(summary.gasMax, 2, 'ppm') : '-');
-  setText('volatilityLevel', ok ? summary.volatilityLevel : '-');
-  setText('temperatureChangeRate', ok ? formatNumber(summary.temperatureChangeRate, 3, '℃/min') : '-');
-  setText('humidityChangeRate', ok ? formatNumber(summary.humidityChangeRate, 3, '%/min') : '-');
-  setText('gasChangeRate', ok ? formatNumber(summary.gasChangeRate, 3, 'ppm/min') : '-');
-  setText('summaryTrend', ok ? summary.trend : '-');
-
-  const trendOk = trend?.success === true;
-  setText('temperatureTrend', trendOk ? trend.temperatureTrend : '-');
-  setText('humidityTrend', trendOk ? trend.humidityTrend : '-');
-  setText('gasTrend', trendOk ? trend.gasTrend : '-');
-  setText('trendExplanation', trendOk ? trend.explanation : trend?.message ?? '-');
-}
-
-function renderForecast(data) {
-  const ok = data?.success === true;
-  setText('forecastMessage', data?.message ?? '等待预测结果');
-  setText('forecastCurrent', ok ? formatNumber(data.currentTemperature, 2, '℃') : '-');
-  setText('forecast5', ok ? formatNumber(data.finalForecast5min, 2, '℃') : '-');
-  setText('forecast10', ok ? formatNumber(data.finalForecast10min, 2, '℃') : '-');
-  setText('forecastTrend', ok ? data.trend : '-');
-  setText('forecastConfidence', ok ? data.confidence : '-');
-  setText('forecastSampleCount', ok ? data.sampleCount : '-');
-  setText('movingAverageForecast', ok ? `${formatNumber(data.movingAverageForecast5min, 2, '℃')} / ${formatNumber(data.movingAverageForecast10min, 2, '℃')}` : '-');
-  setText('linearRegressionForecast', ok ? `${formatNumber(data.linearRegressionForecast5min, 2, '℃')} / ${formatNumber(data.linearRegressionForecast10min, 2, '℃')}` : '-');
-  setText('ewmaForecast', ok ? `${formatNumber(data.exponentialSmoothingForecast5min, 2, '℃')} / ${formatNumber(data.exponentialSmoothingForecast10min, 2, '℃')}` : '-');
-}
-
-function renderAnomaly(data) {
-  const ok = data?.success === true;
-  const items = Array.isArray(data?.items) ? data.items : [];
-  setText('anomalyMessage', data?.message ?? '等待异常检测结果');
-  setText('anomalyCount', `${ok ? data.anomalyCount : 0} 个异常`);
-  const state = document.getElementById('anomalyState');
-  state.textContent = ok && data.hasAnomaly ? '存在异常' : ok ? '未发现异常' : '数据不足';
-  state.className = ok && data.hasAnomaly ? 'tag tag-high' : ok ? 'tag tag-safe' : 'tag tag-muted';
-
-  const list = document.getElementById('anomalyList');
-  if (!items.length) {
-    list.innerHTML = `<div class="empty-box">${escapeHtml(data?.message ?? '暂无异常记录')}</div>`;
-    return;
-  }
-  list.innerHTML = items.map(item => `
-    <article class="anomaly-item">
-      <div class="anomaly-head">
-        <strong>${escapeHtml(item.type)}</strong>
-        ${levelTag(item.level)}
-      </div>
-      <p>${escapeHtml(item.reason)}</p>
-      <span>${escapeHtml(formatTime(item.time))}</span>
-      <em>${escapeHtml(item.suggestion)}</em>
-    </article>
-  `).join('');
-}
-
-function renderAgentContext(context) {
-  if (!context?.dataQuality) {
-    return;
-  }
-  const quality = context.dataQuality;
-  if (quality.hasEnoughRealData === false && currentSource !== 'MOCK') {
-    setNotice('真实数据不足。请确认串口实时接入状态，或手动切换模拟演示数据。');
-  }
-}
-
-async function runAgent(defaultQuestion) {
-  const questionInput = document.getElementById('agentQuestion');
-  const question = questionInput.value.trim() || defaultQuestion;
-  questionInput.value = question;
-  setText('agentAnswer', 'Mock Agent 正在读取统计、预测和异常检测结果...');
-  setTools([]);
+// ====== Utility ======
+async function getJson(url, fallback) {
   try {
-    const response = await fetch(api.agentAnalyze, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question, source: currentSource }),
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    const payload = await response.json();
-    setText('agentAnswer', payload.answer ?? '暂无回答');
-    setTools(payload.usedTools ?? []);
-  } catch (error) {
-    setText('agentAnswer', `Agent 分析失败：${error.message}`);
-  }
+    const resp = await fetch(url);
+    if (resp.status === 204) return fallback;
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    return await resp.json();
+  } catch (err) { return fallback; }
 }
 
-function renderDatabaseStatus(data) {
-  setText('dbConnected', data.connected === true ? '已连接' : '未确认');
-  setText('dbName', data.database ?? '-');
-  setText('sensorDataCount', data.sensorDataCount ?? '-');
-  setText('realSerialCount', data.realSerialCount ?? '-');
-  setText('realMqttCount', data.realMqttCount ?? '-');
-  setText('mockCount', data.mockCount ?? '-');
-  setText('latestSummaryTime', formatTime(data.latestSummaryTime));
-  setText('latestAnomalyTime', formatTime(data.latestAnomalyTime));
+function sourceLabel(s) { return SOURCE_LABELS[s] || s || '无数据'; }
+function esc(v) { return String(v ?? '-').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function fmt(v, d, u) {
+  if (v === null || v === undefined || v === '') return '-';
+  if (typeof v === 'string' && v.match(/^\d{4}-\d{2}-\d{2}/)) return new Date(v).toLocaleString();
+  const n = Number(v);
+  if (!Number.isFinite(n)) return esc(String(v));
+  return `${n.toFixed(d ?? 1)}${u ? ' ' + u : ''}`;
 }
+function num(v) { const n = Number(v); return Number.isFinite(n) ? n : null; }
+function escapeHtml(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
-function renderSerialStatus(data) {
-  const connected = data.connected === true;
-  setText('serialConnected', data.enabled === false ? '未启用' : connected ? '已连接' : '未连接');
-  setText('serialPort', data.portName ?? '-');
-  setText('serialBaud', data.baudRate ?? '-');
-  setText('serialReceived', data.receivedLines ?? '-');
-  setText('serialSaved', data.savedRecords ?? '-');
-  setText('serialSavedAt', formatTime(data.lastSavedAt));
-  const message = data.lastSavedMessage || data.lastRawMessage || data.lastError || '等待串口数据。';
-  setText('serialLastMessage', message);
-  if (data.enabled && connected && currentSource === 'REAL_SERIAL') {
-    setNotice(`串口 ${data.portName} / ${data.baudRate} 已连接，正在实时写入真实串口数据。`);
-  } else if (data.enabled && data.lastError) {
-    setNotice(`串口接入未成功：${data.lastError}`, 'warn');
-  }
-}
-
-function renderRetentionPolicy(data) {
-  setText('retentionRaw', valueWithDays(data.rawDataRetentionDays));
-  setText('retentionMock', valueWithDays(data.mockDataRetentionDays));
-  setText('retentionSummary', valueWithDays(data.summaryRetentionDays));
-  setText('retentionAnomaly', valueWithDays(data.anomalyRetentionDays));
-  setText('cleanupCron', data.cleanupCron ?? '-');
-}
-
-function renderCacheStatus(data) {
-  setText('cacheProvider', data.provider ? data.provider.toUpperCase() : '-');
-  setText('cacheEnabled', data.enabled === true ? '已启用' : '未启用');
-  setText('cacheTtl', data.ttlSeconds ? `${data.ttlSeconds} 秒` : '-');
-  setText('cacheMaxSize', data.maxSize ?? '-');
-  setText('cacheDescription', data.description ?? '用于加速统计分析、预测分析、异常检测和 Agent 上下文读取，不替代 MySQL 存储。');
-  const cacheNames = Array.isArray(data.cacheNames) ? data.cacheNames : [];
-  document.getElementById('cacheNames').innerHTML = cacheNames.map(name => `<span>${escapeHtml(name)}</span>`).join('');
-}
-
-function insufficient(message) {
-  return { success: false, message, sampleCount: 0 };
-}
-
-function setNotice(message, tone = 'idle') {
-  const notice = document.getElementById('globalNotice');
-  notice.textContent = message;
-  notice.className = `notice ${tone}`;
-}
-
-function updateStatusClass(status) {
-  const el = document.getElementById('status');
-  el.className = 'status-text';
-  if (status === 'SAFE') {
-    el.classList.add('safe-text');
-  } else if (status === 'WARNING') {
-    el.classList.add('warning-text');
-  }
-}
-
-function updateSourceClass(source) {
-  const el = document.getElementById('dataSource');
-  el.className = `source-text ${sourceClass(source)}`;
-}
-
-function statusBadge(status) {
-  const normalized = status || 'UNKNOWN';
-  const cls = normalized === 'WARNING' ? 'badge badge-warning' : normalized === 'SAFE' ? 'badge badge-safe' : 'badge badge-muted';
-  return `<span class="${cls}">${escapeHtml(normalized)}</span>`;
-}
-
-function sourceBadge(source) {
-  const normalized = normalizeSource(source);
-  return `<span class="badge ${sourceClass(normalized)}">${escapeHtml(sourceLabel(normalized))}</span>`;
-}
-
-function levelTag(level) {
-  const normalized = level || 'LOW';
-  const cls = normalized === 'HIGH' ? 'tag tag-high' : normalized === 'MEDIUM' ? 'tag tag-medium' : 'tag tag-low';
-  return `<span class="${cls}">${escapeHtml(normalized)}</span>`;
-}
-
-function sourceLabel(source) {
-  return SOURCE_LABELS[source] || source || '无数据';
-}
-
-function sourceClass(source) {
-  if (source === 'REAL_SERIAL') return 'source-real-serial';
-  if (source === 'REAL_MQTT') return 'source-real-mqtt';
-  if (source === 'MOCK') return 'source-mock';
-  if (source === 'MANUAL') return 'source-manual';
-  if (source === 'ALL') return 'source-all';
-  return 'source-waiting';
-}
-
-function normalizeSource(source) {
-  return source || '无数据';
-}
-
-function connectionText(source) {
-  if (source === 'REAL_SERIAL') return '真实串口数据源';
-  if (source === 'REAL_MQTT') return '真实 MQTT 数据源';
-  if (source === 'MOCK') return '手动模拟演示数据';
-  if (source === 'MANUAL') return '手动录入数据';
-  if (source === 'ALL') return '混合数据查询';
-  return WAITING_TEXT;
-}
-
-function valueWithDays(value) {
-  return value === undefined || value === null ? '-' : `${value} 天`;
-}
-
-function setTools(tools) {
-  document.getElementById('agentTools').innerHTML = tools.map(tool => `<span>${escapeHtml(tool)}</span>`).join('');
-}
-
-function setText(id, value) {
-  const el = document.getElementById(id);
-  if (el) {
-    el.textContent = value ?? '-';
-  }
-}
-
-function formatNumber(value, digits = 1, unit = '') {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return '-';
-  return `${number.toFixed(digits)}${unit ? ` ${unit}` : ''}`;
-}
-
-function numberOrNull(value) {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : null;
-}
-
-function formatTime(value, short = false) {
-  if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return short ? date.toLocaleTimeString() : date.toLocaleString();
-}
-
-function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>"']/g, char => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;',
-  }[char]));
-}
-
-refreshAll();
-setInterval(refreshAll, 3000);
+// ====== Init ======
+refreshAgentContext();
