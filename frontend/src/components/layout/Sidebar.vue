@@ -91,6 +91,7 @@ const menu = [
   { path: '/forecast', label: '温度预测', icon: '🔮' },
   { path: '/anomaly', label: '异常检测', icon: '⚠' },
   { path: '/recent', label: '最近数据', icon: '📋' },
+  { path: '/application', label: '应用场景', icon: '🎯' },
   { path: '/system', label: '系统状态', icon: '⚙' },
   { path: '/about', label: '关于项目', icon: '📖' },
 ]

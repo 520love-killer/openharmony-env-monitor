@@ -1,6 +1,50 @@
 # TASK PROGRESS
 
-更新时间：2026-05-20 00:35 Asia/Shanghai
+更新时间：2026-05-20 01:20 Asia/Shanghai
+
+## v2.2 用户身份与应用场景扩展 — 完成总结
+
+### 当前状态
+系统已支持 6 种用户身份和 6 种应用场景，可根据不同场景规则进行环境评分、风险判断和应用建议。前端新增"应用场景"页面，Agent 新增场景化分析工具。
+
+### 已完成内容
+
+#### 1. 场景规则引擎
+- 新增 `ScenarioRuleEngine`：定义 6 种场景阈值和权重
+- 新增 `ScenarioProfileService`：风险评估和建议生成
+- 新增 `ScenarioAnalysisService`：综合评分计算（0-100 分）
+- 新增 `ScenarioController`：`GET /api/scenario/analysis`
+
+#### 2. 用户身份
+STUDENT（学生）、FARMER（农业种植者）、ENGINEER（工程技术人员）、AC_USER（空调使用者）、RESEARCHER（研究分析者）、CUSTOM（自定义用户）
+
+#### 3. 应用场景
+GENERAL_MONITOR（通用环境监测）、AGRICULTURE_GREENHOUSE（农业温室）、SMART_AIR_CONDITIONER（智能空调）、INDUSTRIAL_SAFETY（工业安全）、LAB_ENVIRONMENT（实验室环境）、CUSTOM_SCENARIO（自定义场景）
+
+#### 4. 环境评分算法
+- 温度得分 + 湿度得分 + 燃气安全得分 + 趋势稳定得分 + 异常风险扣分
+- 各场景权重不同（农业侧重温湿度，工业侧重燃气，空调侧重温度舒适）
+- 评分等级：EXCELLENT(90-100)、GOOD(75-89)、NORMAL(60-74)、WARNING(0-59)
+- 返回可解释的 scoreBreakdown
+
+#### 5. Agent 场景化增强
+- `AgentToolService` 新增 `getScenarioAnalysis` 工具
+- 用户问农业/空调/工业/实验相关问题时自动触发场景分析
+- 回答中显示场景评分、风险和建议
+
+#### 6. 前端应用场景页面
+- 新增 `ApplicationView.vue`：用户身份选择、场景选择、参数配置
+- 新增 `scenario.ts` API 和 Pinia Store
+- 新增 `/application` 路由和侧边栏菜单项
+- 页面显示：评分、等级、评分明细、关键指标、风险、建议、算法说明
+- 参数配置持久化到 localStorage
+
+#### 7. 测试验证
+- 5 种场景接口全部返回正确评分和建议
+- Agent 场景化工具调用正常
+- 前端编译通过，静态资源已集成
+
+---
 
 ## v2.1 DeepSeek 真模型接入 — 完成总结
 

@@ -1,1 +1,0 @@
-import{i as t,u as a,e as s,a as o,A as c,_ as n}from"./index-DaAb41Au.js";const r={class:"section-header"},i=t({__name:"SectionHeader",props:{title:{}},setup(e){return(_,d)=>(a(),s("div",r,[o("h2",null,c(e.title),1)]))}}),l=n(i,[["__scopeId","data-v-8bd5ac9a"]]);export{l as S};

@@ -1,6 +1,99 @@
 # CHECKPOINT
 
-更新时间：2026-05-20 00:35 Asia/Shanghai
+更新时间：2026-05-20 01:20 Asia/Shanghai
+
+# v2.2 用户身份与应用场景扩展 — 完成总结
+
+## 当前状态
+系统已扩展为支持多场景的环境监测分析平台。用户可选择身份和应用场景，系统根据场景规则引擎进行环境评分、风险识别和应用建议。v2.0/v2.1 所有功能保持正常。
+
+## 已完成内容
+
+### 1. 场景规则引擎
+- `ScenarioRuleEngine`：6 种场景阈值配置 + 权重配置
+- `ScenarioProfileService`：场景化风险评估 + 建议生成
+- `ScenarioAnalysisService`：加权评分算法 + 指标状态计算
+- `ScenarioController`：`GET /api/scenario/analysis`
+
+### 2. 用户身份（6 种）
+| 身份 | 说明 | 关注重点 |
+|------|------|----------|
+| STUDENT | 学生 / 实验学习者 | 实验过程、数据理解、报告生成 |
+| FARMER | 农业种植者 | 温室环境、作物生长、通风浇水 |
+| ENGINEER | 工程技术人员 | 设备运行、安全阈值、异常报警 |
+| AC_USER | 空调使用者 | 室内舒适度、降温效果、调节建议 |
+| RESEARCHER | 研究分析者 | 统计分析、预测算法、数据波动 |
+| CUSTOM | 自定义用户 | 自定义阈值和偏好 |
+
+### 3. 应用场景（6 种）
+| 场景 | 说明 | 阈值特点 |
+|------|------|----------|
+| GENERAL_MONITOR | 通用环境监测 | 温度 18-35C，湿度 30-75% |
+| AGRICULTURE_GREENHOUSE | 农业温室 | 支持番茄/草莓/黄瓜作物配置 |
+| SMART_AIR_CONDITIONER | 智能空调 | 支持宿舍/教室/卧室/办公室配置 |
+| INDUSTRIAL_SAFETY | 工业安全 | 温度 10-35C，燃气严格监控 |
+| LAB_ENVIRONMENT | 实验室环境 | 温度 20-28C，关注数据稳定性 |
+| CUSTOM_SCENARIO | 自定义场景 | 用户自由设定阈值 |
+
+### 4. 环境评分算法
+- 满分 100 分，5 个维度加权
+- 通用：温度 30% + 湿度 25% + 燃气 25% + 趋势 10% + 异常 10%
+- 农业：温度 35% + 湿度 30% + 燃气 15% + 趋势 10% + 异常 10%
+- 空调：温度 40% + 湿度 20% + 燃气 10% + 趋势 25% + 异常 5%
+- 工业：燃气 40% + 温度 25% + 异常 20% + 湿度 10% + 趋势 5%
+- 实验：异常 30% + 趋势 25% + 温度 20% + 湿度 15% + 燃气 10%
+
+### 5. Agent 增强
+- `AgentToolService` 新增 `getScenarioAnalysis` 工具
+- 支持场景化关键词触发（农业、空调、工业、实验室）
+- 回答中展示场景评分、风险和建议
+
+### 6. 前端新增页面
+- `ApplicationView.vue`：应用场景控制台
+- 用户身份卡片选择、场景卡片选择、参数配置
+- 大数字评分显示、评分明细进度条、风险/建议卡片
+- 算法说明列表、Agent 跳转按钮
+- `scenario.ts` Pinia Store + localStorage 持久化
+
+### 7. 接口测试
+| 接口 | 状态 | 说明 |
+|------|------|------|
+| GET /api/scenario/analysis | ✅ | 全部 5 种场景测试通过 |
+| Agent getScenarioAnalysis | ✅ | 场景化问题自动触发 |
+
+## v2.2 新增文件
+- `src/main/java/com/example/envmonitor/dto/ScenarioAnalysisResponse.java`
+- `src/main/java/com/example/envmonitor/service/ScenarioRuleEngine.java`
+- `src/main/java/com/example/envmonitor/service/ScenarioProfileService.java`
+- `src/main/java/com/example/envmonitor/service/ScenarioAnalysisService.java`
+- `src/main/java/com/example/envmonitor/controller/ScenarioController.java`
+- `frontend/src/views/ApplicationView.vue`
+- `frontend/src/api/scenario.ts`
+- `frontend/src/stores/scenario.ts`
+
+## v2.2 修改文件
+- `src/main/java/com/example/envmonitor/config/CacheConfig.java`（新增 scenarioCache）
+- `src/main/java/com/example/envmonitor/service/AgentToolService.java`（新增 getScenarioAnalysis 工具）
+- `src/main/java/com/example/envmonitor/service/AgentService.java`（新增场景分析格式化）
+- `frontend/src/types/index.ts`（新增 Scenario 类型）
+- `frontend/src/router/index.ts`（新增 /application 路由）
+- `frontend/src/components/layout/Sidebar.vue`（新增应用场景菜单）
+- `README.md` / `TASK_PROGRESS.md` / `CHECKPOINT.md`
+
+## 重要说明
+- 当前系统为"应用场景分析与建议"系统，不是工业级自动控制系统
+- 评分算法为轻量级可解释规则，适合课程项目答辩
+- 不声称具备真实自动控制能力
+- v2.0/v2.1 所有稳定功能未受影响
+
+## 下一步
+- [x] DeepSeek LLM 接入（v2.1）
+- [x] 用户身份与应用场景扩展（v2.2）
+- [ ] 接入真实 MQTT 传感器数据
+- [ ] 增加自动化单元测试
+- [ ] 向量数据库语义 RAG
+
+---
 
 # v2.1 DeepSeek 真模型接入 — 完成总结
 

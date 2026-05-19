@@ -1,1 +1,0 @@
-import{i as e,u as a,e as s,a as o,A as c,_ as n}from"./index-DaAb41Au.js";const p={class:"empty-state"},_=e({__name:"EmptyState",props:{text:{}},setup(t){return(r,m)=>(a(),s("div",p,[o("p",null,c(t.text),1)]))}}),d=n(_,[["__scopeId","data-v-9e5fd7c9"]]);export{d as E};

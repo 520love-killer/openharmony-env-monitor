@@ -1,6 +1,6 @@
 # OpenHarmony 环境监测预警系统 Web 平台
 
-当前版本：v2.1 DeepSeek 真模型版
+当前版本：v2.2 用户身份与应用场景扩展版
 
 ## v2.0 验证完成总结
 
@@ -244,6 +244,23 @@ S_t = alpha * X_t + (1 - alpha) * S_{t-1}
 - 每天凌晨 3:00 自动清理；
 - 不删除最近 24 小时数据。
 
+## v2.2 用户身份与应用场景扩展版
+
+v2.2 在 v2.1 基础上扩展了多场景环境分析能力，让用户可以根据自身身份和应用场景获取定制化的环境评分、风险判断和应用建议。
+
+### 主要变化
+
+1. 支持 6 种用户身份：学生、农业种植者、工程技术人员、空调使用者、研究分析者、自定义用户
+2. 支持 6 种应用场景：通用环境监测、农业温室、智能空调、工业安全、实验室环境、自定义场景
+3. 场景规则引擎：不同场景采用不同阈值和评分权重
+4. 环境评分算法：0-100 分综合评分，可解释的分项得分
+5. 场景化风险识别和建议生成
+6. Agent 新增 `getScenarioAnalysis` 场景化分析工具
+7. 前端新增"应用场景"页面（`/application`），科技风控制台设计
+8. 参数配置持久化到 localStorage
+
+**重要说明**：当前系统为"应用场景分析与建议"系统，基于轻量级可解释规则进行评分，不是工业级自动控制系统。
+
 ## v2.1 DeepSeek 真模型版
 
 v2.1 在 v2.0 基础上将 Agent 从 Mock / 模板模式升级为真实 DeepSeek LLM 模式。
@@ -399,14 +416,20 @@ Agent（v2.0）：
 
 ```text
 POST   /api/agent/chat
-POST   /api/agent/stream            ← 新增：SSE 流式输出
-GET    /api/agent/status            ← 新增：Agent 状态（DeepSeek/Mock）
+POST   /api/agent/stream            ← SSE 流式输出
+GET    /api/agent/status            ← Agent 状态（DeepSeek/Mock）
 GET    /api/agent/context?source=REAL_SERIAL
 GET    /api/agent/sessions
 GET    /api/agent/sessions/{sessionId}
 DELETE /api/agent/sessions/{sessionId}
 POST   /api/agent/report-summary
 POST   /api/agent/explain-algorithm
+```
+
+场景分析（v2.2）：
+
+```text
+GET /api/scenario/analysis?scenario=AGRICULTURE_GREENHOUSE&userRole=FARMER&crop=tomato&source=REAL_SERIAL
 ```
 
 系统状态：
@@ -491,6 +514,7 @@ SELECT * FROM anomaly_record ORDER BY id DESC LIMIT 10;
 - [x] 串口实时读取已接入
 - [x] Agent v2.0 结构化 RAG + Tool Calling
 - [x] Agent v2.1 DeepSeek 真模型接入
+- [x] Agent v2.2 场景化分析（6 种身份 × 6 种场景）
 - [x] 7 种 Agent 工具、会话持久化、多轮对话
 - [x] DeepSeek 流式输出（SSE + ReadableStream）
 - [x] 多轮对话上下文记忆（localStorage + MySQL）

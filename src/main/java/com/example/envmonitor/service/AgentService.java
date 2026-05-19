@@ -376,6 +376,31 @@ public class AgentService {
                 yield result.summary();
             }
             case "getDatabaseStatus" -> result.summary();
+            case "getScenarioAnalysis" -> {
+                if (result.data() instanceof com.example.envmonitor.dto.ScenarioAnalysisResponse s) {
+                    StringBuilder sb = new StringBuilder();
+                    sb.append("### 场景化环境分析\n\n");
+                    sb.append(String.format("- 场景：%s\n", s.scenarioName()));
+                    sb.append(String.format("- 综合评分：%d 分（%s）\n", s.score(), s.levelName()));
+                    sb.append(String.format("- 置信度：%s\n", s.confidence()));
+                    sb.append(String.format("- 样本数：%d\n\n", s.sampleCount()));
+                    if (!s.risks().isEmpty()) {
+                        sb.append("**风险提示：**\n");
+                        for (var r : s.risks()) {
+                            sb.append(String.format("- [%s] %s\n", r.level(), r.message()));
+                        }
+                        sb.append("\n");
+                    }
+                    if (!s.advices().isEmpty()) {
+                        sb.append("**建议：**\n");
+                        for (var a : s.advices()) {
+                            sb.append(String.format("- %s：%s\n", a.title(), a.content()));
+                        }
+                    }
+                    yield sb.toString();
+                }
+                yield result.summary();
+            }
             default -> result.summary();
         };
     }

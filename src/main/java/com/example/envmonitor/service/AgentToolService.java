@@ -20,19 +20,22 @@ public class AgentToolService {
     private final ForecastService forecastService;
     private final AnomalyService anomalyService;
     private final SystemStatusService systemStatusService;
+    private final ScenarioAnalysisService scenarioAnalysisService;
 
     public AgentToolService(
         SensorDataService sensorDataService,
         AnalyticsService analyticsService,
         ForecastService forecastService,
         AnomalyService anomalyService,
-        SystemStatusService systemStatusService
+        SystemStatusService systemStatusService,
+        ScenarioAnalysisService scenarioAnalysisService
     ) {
         this.sensorDataService = sensorDataService;
         this.analyticsService = analyticsService;
         this.forecastService = forecastService;
         this.anomalyService = anomalyService;
         this.systemStatusService = systemStatusService;
+        this.scenarioAnalysisService = scenarioAnalysisService;
     }
 
     public List<String> selectTools(String message) {
@@ -67,6 +70,21 @@ public class AgentToolService {
         if (containsAny(msg, "算法", "原理", "怎么预测", "精准度", "置信度", "什么方法", "explain")) {
             tools.add("getAnalyticsSummary");
             tools.add("getTemperatureForecast");
+        }
+        if (containsAny(msg, "农业", "温室", "作物", "种菜", "番茄", "草莓", "黄瓜", "种植", "大棚", "适合作物", "生长环境")) {
+            tools.add("getScenarioAnalysis");
+        }
+        if (containsAny(msg, "空调", "制冷", "凉快", "舒适", "宿舍", "教室", "卧室", "办公室", "降温", "除湿", "室内温度")) {
+            tools.add("getScenarioAnalysis");
+        }
+        if (containsAny(msg, "工业", "安全", "设备", "燃气泄漏", "工厂", "车间", "安全风险")) {
+            tools.add("getScenarioAnalysis");
+        }
+        if (containsAny(msg, "实验室", "实验数据", "传感器异常", "数据稳定", "实验条件", "精度")) {
+            tools.add("getScenarioAnalysis");
+        }
+        if (containsAny(msg, "场景", "应用", "评分", "建议", "怎么改善", "怎么处理")) {
+            tools.add("getScenarioAnalysis");
         }
 
         if (tools.isEmpty()) {
@@ -141,6 +159,16 @@ public class AgentToolService {
                     String.format("数据库 %s，sensor_data 共 %d 条",
                         status.getOrDefault("database", "unknown"),
                         status.getOrDefault("sensorDataCount", 0)));
+            }
+            case "getScenarioAnalysis" -> {
+                var analysis = scenarioAnalysisService.analyze(
+                    "GENERAL_MONITOR", "STUDENT", source, 50,
+                    null, null, null, null, null, null, null
+                );
+                yield AgentToolResult.of(toolName, analysis.score() > 0 || analysis.sampleCount() > 0, analysis,
+                    String.format("场景分析：%s，评分 %d 分（%s），%d 条风险，%d 条建议",
+                        analysis.scenarioName(), analysis.score(), analysis.levelName(),
+                        analysis.risks().size(), analysis.advices().size()));
             }
             default -> AgentToolResult.of(toolName, false, null, "未知工具");
         };

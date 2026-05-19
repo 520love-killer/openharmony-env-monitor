@@ -12,6 +12,7 @@ const routes = [
       { path: 'forecast', component: () => import('@/views/ForecastView.vue') },
       { path: 'anomaly', component: () => import('@/views/AnomalyView.vue') },
       { path: 'recent', component: () => import('@/views/RecentDataView.vue') },
+      { path: 'application', component: () => import('@/views/ApplicationView.vue') },
       { path: 'system', component: () => import('@/views/SystemStatusView.vue') },
       { path: 'about', component: () => import('@/views/AboutView.vue') },
     ],

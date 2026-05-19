@@ -23,7 +23,8 @@ public class CacheConfig {
         "agentContextCache",
         "agentToolResultCache",
         "agentKnowledgeCache",
-        "databaseStatusCache"
+        "databaseStatusCache",
+        "scenarioCache"
     );
 
     @Bean

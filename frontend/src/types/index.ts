@@ -130,3 +130,50 @@ export interface AgentSession {
   createdAt: string
   updatedAt: string
 }
+
+export interface ScenarioRiskItem {
+  type: string
+  level: string
+  message: string
+}
+
+export interface ScenarioAdviceItem {
+  type: string
+  title: string
+  content: string
+}
+
+export interface ScenarioMetricStatus {
+  temperatureStatus: string
+  humidityStatus: string
+  gasStatus: string
+  trendStatus: string
+}
+
+export interface ScenarioScoreBreakdown {
+  temperatureScore: number
+  humidityScore: number
+  gasScore: number
+  trendScore: number
+  anomalyScore: number
+}
+
+export interface ScenarioAnalysis {
+  scenario: string
+  scenarioName: string
+  userRole: string
+  userRoleName: string
+  score: number
+  level: string
+  levelName: string
+  confidence: string
+  summary: string
+  risks: ScenarioRiskItem[]
+  advices: ScenarioAdviceItem[]
+  metrics: ScenarioMetricStatus
+  scoreBreakdown: ScenarioScoreBreakdown
+  algorithmNotes: string[]
+  dataSource: string
+  sampleCount: number
+  updatedAt: string
+}
