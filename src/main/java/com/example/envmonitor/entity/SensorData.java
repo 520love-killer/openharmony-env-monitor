@@ -34,7 +34,7 @@ public class SensorData {
     @Column(name = "data_source")
     private String dataSource;
 
-    @Column(name = "raw_message", length = 1000)
+    @Column(name = "raw_message", columnDefinition = "TEXT")
     private String rawMessage;
 
     @Column(name = "created_at", nullable = false)

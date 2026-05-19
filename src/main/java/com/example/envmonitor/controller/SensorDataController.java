@@ -2,8 +2,9 @@ package com.example.envmonitor.controller;
 
 import com.example.envmonitor.dto.SensorDataRequest;
 import com.example.envmonitor.entity.SensorData;
-import com.example.envmonitor.service.PredictionService;
+import com.example.envmonitor.service.ForecastService;
 import com.example.envmonitor.service.SensorDataService;
+import com.example.envmonitor.util.DataSourceUtils;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
@@ -20,14 +21,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/sensor-data")
 public class SensorDataController {
-    private static final String WAITING_MESSAGE = "暂无演示数据，请先生成模拟数据或写入后端测试数据";
+    private static final String WAITING_MESSAGE = "等待 Hi3861 真实设备数据。";
 
     private final SensorDataService sensorDataService;
-    private final PredictionService predictionService;
+    private final ForecastService forecastService;
 
-    public SensorDataController(SensorDataService sensorDataService, PredictionService predictionService) {
+    public SensorDataController(SensorDataService sensorDataService, ForecastService forecastService) {
         this.sensorDataService = sensorDataService;
-        this.predictionService = predictionService;
+        this.forecastService = forecastService;
     }
 
     @PostMapping
@@ -36,7 +37,7 @@ public class SensorDataController {
     }
 
     @GetMapping("/latest")
-    public Map<String, Object> latest(@RequestParam(defaultValue = SensorDataService.SOURCE_MOCK) String source) {
+    public Map<String, Object> latest(@RequestParam(defaultValue = DataSourceUtils.REAL_SERIAL) String source) {
         String dataSource = sensorDataService.normalizeSource(source);
         return sensorDataService.latestBySource(dataSource)
             .<Map<String, Object>>map(data -> Map.of(
@@ -54,7 +55,7 @@ public class SensorDataController {
     @GetMapping("/recent")
     public List<SensorData> recent(
         @RequestParam(defaultValue = "50") int limit,
-        @RequestParam(defaultValue = SensorDataService.SOURCE_MOCK) String source
+        @RequestParam(defaultValue = DataSourceUtils.REAL_SERIAL) String source
     ) {
         return sensorDataService.recentBySource(source, limit);
     }
@@ -68,13 +69,13 @@ public class SensorDataController {
     }
 
     @GetMapping("/warnings")
-    public List<SensorData> warnings(@RequestParam(defaultValue = SensorDataService.SOURCE_MOCK) String source) {
+    public List<SensorData> warnings(@RequestParam(defaultValue = DataSourceUtils.REAL_SERIAL) String source) {
         return sensorDataService.warningsBySource(source);
     }
 
     @GetMapping("/prediction")
-    public Map<String, Object> prediction(@RequestParam(defaultValue = SensorDataService.SOURCE_MOCK) String source) {
-        return predictionService.predictNext(source);
+    public Object prediction(@RequestParam(defaultValue = DataSourceUtils.REAL_SERIAL) String source) {
+        return forecastService.temperatureForecast(source, 50);
     }
 
     @PostMapping("/mock")

@@ -4,123 +4,270 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>OpenHarmony 环境监测预警系统</title>
-    <link rel="stylesheet" href="/style.css?v=20260518-v1-demo">
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="/style.css?v=20260519-v11">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 <header class="topbar">
-    <div>
+    <div class="topbar-title">
         <h1>OpenHarmony 环境监测预警系统</h1>
-        <p>Hi3861 综合实训原型 + Spring Boot + H2 + Web 可视化</p>
+        <p>Hi3861 + MQ-2 + AHT20 + OLED + Spring Boot + MySQL + Caffeine Cache + 智能分析</p>
     </div>
-    <div class="actions">
-        <button id="refreshBtn">刷新数据</button>
-        <button id="mockBtn">生成模拟数据</button>
-        <button id="warningBtn">查看预警记录</button>
-        <span class="action-hint">模拟数据仅用于演示，会标记为 MOCK</span>
+    <div class="toolbar">
+        <label class="source-control" for="sourceSelect">
+            <span>数据源</span>
+            <select id="sourceSelect">
+                <option value="REAL_SERIAL" selected>REAL_SERIAL</option>
+                <option value="REAL_MQTT">REAL_MQTT</option>
+                <option value="MOCK">MOCK</option>
+                <option value="ALL">ALL</option>
+            </select>
+        </label>
+        <button id="refreshBtn" type="button">刷新</button>
+        <button id="mockBtn" class="button-secondary" type="button">生成 MOCK 演示数据</button>
     </div>
 </header>
 
-<main class="layout">
-    <section class="metrics">
-        <article class="metric">
-            <span>设备 ID</span>
-            <strong id="deviceId">-</strong>
-        </article>
-        <article class="metric">
-            <span>温度</span>
-            <strong id="temperature">-</strong>
-        </article>
-        <article class="metric">
-            <span>湿度</span>
-            <strong id="humidity">-</strong>
-        </article>
-        <article class="metric">
-            <span>燃气浓度</span>
-            <strong id="gas">-</strong>
-        </article>
-        <article class="metric status-card" id="statusCard">
-            <span>安全状态</span>
-            <strong id="status">-</strong>
-        </article>
-        <article class="metric source-card" id="sourceCard">
-            <span>数据来源</span>
-            <strong id="dataSource">MOCK</strong>
-        </article>
-        <article class="metric">
-            <span>设备连接</span>
-            <strong id="connectionState">基础展示版演示数据</strong>
-        </article>
+<main class="page-shell">
+    <div id="globalNotice" class="notice">默认读取 REAL_SERIAL。没有真实数据时会提示等待设备，不会自动生成随机数据。</div>
+
+    <section class="section">
+        <div class="section-heading">
+            <div>
+                <h2>实时数据</h2>
+                <p>展示最近一条传感器数据，数据来源会明确标记。</p>
+            </div>
+            <span id="lastUpdated" class="muted">尚未刷新</span>
+        </div>
+        <div class="metric-grid">
+            <article class="metric-card">
+                <span>设备 ID</span>
+                <strong id="deviceId">-</strong>
+            </article>
+            <article class="metric-card">
+                <span>温度</span>
+                <strong id="temperature">-</strong>
+            </article>
+            <article class="metric-card">
+                <span>湿度</span>
+                <strong id="humidity">-</strong>
+            </article>
+            <article class="metric-card">
+                <span>燃气浓度</span>
+                <strong id="gas">-</strong>
+            </article>
+            <article class="metric-card">
+                <span>安全状态</span>
+                <strong id="status" class="status-text">-</strong>
+            </article>
+            <article class="metric-card">
+                <span>数据来源</span>
+                <strong id="dataSource" class="source-text">无数据</strong>
+            </article>
+            <article class="metric-card">
+                <span>最新更新时间</span>
+                <strong id="latestTime">-</strong>
+            </article>
+            <article class="metric-card">
+                <span>设备连接</span>
+                <strong id="connectionState">等待 Hi3861 真实设备数据</strong>
+            </article>
+        </div>
     </section>
 
-    <section class="panel">
-        <div class="panel-title">
-            <h2>实时趋势</h2>
-            <span id="chartFallback">如果 Chart.js CDN 无法加载，下方表格仍可用于答辩展示。</span>
+    <section class="section">
+        <div class="section-heading">
+            <div>
+                <h2>趋势图</h2>
+                <p>最近 50 条温度、湿度、燃气浓度变化曲线。</p>
+            </div>
+            <span id="chartFallback" class="muted">Chart.js 未加载时仍可查看表格数据。</span>
         </div>
-        <div class="charts">
+        <div class="chart-grid">
             <div class="chart-box">
                 <h3>温度变化</h3>
-                <div class="chart-canvas">
-                    <canvas id="temperatureChart"></canvas>
-                </div>
+                <div class="chart-canvas"><canvas id="temperatureChart"></canvas></div>
             </div>
             <div class="chart-box">
                 <h3>湿度变化</h3>
-                <div class="chart-canvas">
-                    <canvas id="humidityChart"></canvas>
-                </div>
+                <div class="chart-canvas"><canvas id="humidityChart"></canvas></div>
             </div>
             <div class="chart-box">
                 <h3>燃气浓度变化</h3>
-                <div class="chart-canvas">
-                    <canvas id="gasChart"></canvas>
-                </div>
+                <div class="chart-canvas"><canvas id="gasChart"></canvas></div>
             </div>
         </div>
     </section>
 
-    <section class="grid">
-        <article class="panel">
-            <h2>简单预测</h2>
-            <div class="prediction">
-                <div><span>下一次温度</span><strong id="predTemperature">-</strong></div>
-                <div><span>下一次湿度</span><strong id="predHumidity">-</strong></div>
-                <div><span>下一次燃气</span><strong id="predGas">-</strong></div>
-                <div><span>预测状态</span><strong id="predStatus">-</strong></div>
+    <section class="section">
+        <div class="section-heading">
+            <div>
+                <h2>智能统计分析</h2>
+                <p>基于最近 50 条数据计算平均值、极值、标准差、变化率和整体趋势。</p>
             </div>
-        </article>
-        <article class="panel">
-            <h2>联调说明</h2>
-            <p class="note">v1.0 默认使用模拟数据或后端测试数据进行 Web 展示。“生成模拟数据”仅用于综合实训演示，并会标记为 MOCK。真实 Hi3861 串口数据接入将在 v1.1 中实现，MQTT 接入将在 v1.2 中实现。</p>
-        </article>
+            <span id="summaryMessage" class="muted">等待统计结果</span>
+        </div>
+        <div class="stat-grid">
+            <article class="stat-card"><span>样本数</span><strong id="summarySampleCount">-</strong></article>
+            <article class="stat-card"><span>平均温度</span><strong id="temperatureAvg">-</strong></article>
+            <article class="stat-card"><span>最高温度</span><strong id="temperatureMax">-</strong></article>
+            <article class="stat-card"><span>最低温度</span><strong id="temperatureMin">-</strong></article>
+            <article class="stat-card"><span>温度标准差</span><strong id="temperatureStd">-</strong></article>
+            <article class="stat-card"><span>平均湿度</span><strong id="humidityAvg">-</strong></article>
+            <article class="stat-card"><span>燃气最大值</span><strong id="gasMax">-</strong></article>
+            <article class="stat-card"><span>波动程度</span><strong id="volatilityLevel">-</strong></article>
+            <article class="stat-card"><span>温度变化率</span><strong id="temperatureChangeRate">-</strong></article>
+            <article class="stat-card"><span>湿度变化率</span><strong id="humidityChangeRate">-</strong></article>
+            <article class="stat-card"><span>燃气变化率</span><strong id="gasChangeRate">-</strong></article>
+            <article class="stat-card"><span>整体趋势</span><strong id="summaryTrend">-</strong></article>
+        </div>
+        <div class="trend-strip">
+            <span>温度趋势：<strong id="temperatureTrend">-</strong></span>
+            <span>湿度趋势：<strong id="humidityTrend">-</strong></span>
+            <span>燃气趋势：<strong id="gasTrend">-</strong></span>
+            <span>综合解释：<strong id="trendExplanation">-</strong></span>
+        </div>
     </section>
 
-    <section class="panel">
-        <div class="panel-title">
-            <h2 id="tableTitle">最近 50 条数据</h2>
-            <span id="lastUpdated">未刷新</span>
+    <section class="section two-column">
+        <div>
+            <div class="section-heading compact">
+                <div>
+                    <h2>温度预测分析</h2>
+                    <p>滑动平均、线性回归、指数平滑三种轻量算法综合预测。</p>
+                </div>
+            </div>
+            <div class="stat-grid forecast-grid">
+                <article class="stat-card"><span>当前温度</span><strong id="forecastCurrent">-</strong></article>
+                <article class="stat-card"><span>未来 5 分钟</span><strong id="forecast5">-</strong></article>
+                <article class="stat-card"><span>未来 10 分钟</span><strong id="forecast10">-</strong></article>
+                <article class="stat-card"><span>趋势</span><strong id="forecastTrend">-</strong></article>
+                <article class="stat-card"><span>置信度</span><strong id="forecastConfidence">-</strong></article>
+                <article class="stat-card"><span>样本数</span><strong id="forecastSampleCount">-</strong></article>
+            </div>
+            <div id="forecastMessage" class="inline-message">等待预测结果</div>
+            <div class="algorithm-table">
+                <div><span>滑动平均 5/10 分钟</span><strong id="movingAverageForecast">-</strong></div>
+                <div><span>线性回归 5/10 分钟</span><strong id="linearRegressionForecast">-</strong></div>
+                <div><span>指数平滑 5/10 分钟</span><strong id="ewmaForecast">-</strong></div>
+            </div>
+        </div>
+
+        <div>
+            <div class="section-heading compact">
+                <div>
+                    <h2>异常检测与风险诊断</h2>
+                    <p>检测阈值超限、突变、连续升高和长期无变化。</p>
+                </div>
+            </div>
+            <div class="risk-summary">
+                <span id="anomalyState" class="tag tag-muted">未检测</span>
+                <strong id="anomalyCount">0 个异常</strong>
+                <p id="anomalyMessage">等待异常检测结果</p>
+            </div>
+            <div id="anomalyList" class="anomaly-list"></div>
+        </div>
+    </section>
+
+    <section class="section">
+        <div class="section-heading">
+            <div>
+                <h2>AI 实验助手 / Agent Assistant</h2>
+                <p>当前使用 Mock Agent，根据统计分析、温度预测和异常检测结果生成解释，后续可接入 Spring AI / LangChain4j / 大模型 API。</p>
+            </div>
+        </div>
+        <div class="agent-layout">
+            <div class="agent-input">
+                <textarea id="agentQuestion" rows="4" placeholder="请分析当前环境是否安全"></textarea>
+                <div class="agent-actions">
+                    <button id="agentAnalyzeBtn" type="button">分析当前环境</button>
+                    <button id="agentForecastBtn" class="button-secondary" type="button">解释预测结果</button>
+                    <button id="agentAnomalyBtn" class="button-secondary" type="button">解释异常原因</button>
+                    <button id="agentReportBtn" class="button-secondary" type="button">生成实验报告摘要</button>
+                </div>
+            </div>
+            <div class="agent-output">
+                <h3>助手回答</h3>
+                <p id="agentAnswer">等待提问。</p>
+                <div id="agentTools" class="tool-tags"></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="section">
+        <div class="section-heading">
+            <div>
+                <h2>最近 50 条数据</h2>
+                <p>所有数据来自 MySQL 查询结果，MOCK 数据只在手动生成后显示。</p>
+            </div>
+            <span id="tableSource" class="muted">REAL_SERIAL</span>
         </div>
         <div class="table-wrap">
             <table>
                 <thead>
                 <tr>
-                    <th>ID</th>
-                    <th>设备</th>
+                    <th>时间</th>
+                    <th>设备 ID</th>
                     <th>温度</th>
                     <th>湿度</th>
                     <th>燃气</th>
                     <th>状态</th>
                     <th>数据来源</th>
-                    <th>时间</th>
                 </tr>
                 </thead>
                 <tbody id="dataBody"></tbody>
             </table>
         </div>
     </section>
+
+    <section class="section">
+        <div class="section-heading">
+            <div>
+                <h2>系统状态</h2>
+                <p>数据库、缓存和数据清理策略，用于答辩时说明系统可靠性。</p>
+            </div>
+        </div>
+        <div class="system-grid">
+            <article class="system-card">
+                <h3>数据库状态</h3>
+                <dl>
+                    <div><dt>MySQL 连接</dt><dd id="dbConnected">-</dd></div>
+                    <div><dt>数据库名</dt><dd id="dbName">-</dd></div>
+                    <div><dt>sensor_data 总数</dt><dd id="sensorDataCount">-</dd></div>
+                    <div><dt>REAL_SERIAL 数量</dt><dd id="realSerialCount">-</dd></div>
+                    <div><dt>REAL_MQTT 数量</dt><dd id="realMqttCount">-</dd></div>
+                    <div><dt>MOCK 数量</dt><dd id="mockCount">-</dd></div>
+                    <div><dt>最近统计摘要</dt><dd id="latestSummaryTime">-</dd></div>
+                    <div><dt>最近异常检测</dt><dd id="latestAnomalyTime">-</dd></div>
+                </dl>
+            </article>
+            <article class="system-card">
+                <h3>缓存状态</h3>
+                <dl>
+                    <div><dt>缓存技术栈</dt><dd id="cacheProvider">-</dd></div>
+                    <div><dt>缓存状态</dt><dd id="cacheEnabled">-</dd></div>
+                    <div><dt>缓存 TTL</dt><dd id="cacheTtl">-</dd></div>
+                    <div><dt>最大数量</dt><dd id="cacheMaxSize">-</dd></div>
+                </dl>
+                <p id="cacheDescription" class="muted">用于加速统计分析、预测分析、异常检测和 Agent 上下文读取，不替代 MySQL 存储。</p>
+                <div id="cacheNames" class="tool-tags"></div>
+            </article>
+            <article class="system-card">
+                <h3>数据清理策略</h3>
+                <dl>
+                    <div><dt>真实原始数据</dt><dd id="retentionRaw">-</dd></div>
+                    <div><dt>MOCK 数据</dt><dd id="retentionMock">-</dd></div>
+                    <div><dt>统计摘要</dt><dd id="retentionSummary">-</dd></div>
+                    <div><dt>异常记录</dt><dd id="retentionAnomaly">-</dd></div>
+                    <div><dt>清理时间</dt><dd id="cleanupCron">-</dd></div>
+                </dl>
+                <p class="muted">每天 03:00 自动清理，且不会删除最近 24 小时数据。</p>
+            </article>
+        </div>
+    </section>
 </main>
 
-<script src="/app.js?v=20260518-v1-demo"></script>
+<script src="/app.js?v=20260519-v11"></script>
 </body>
 </html>

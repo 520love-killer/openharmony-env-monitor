@@ -3,6 +3,7 @@ package com.example.envmonitor.service;
 import com.example.envmonitor.dto.SensorDataRequest;
 import com.example.envmonitor.entity.SensorData;
 import com.example.envmonitor.repository.SensorDataRepository;
+import com.example.envmonitor.util.DataSourceUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDateTime;
@@ -13,6 +14,7 @@ import java.util.Optional;
 import java.util.Random;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,9 +22,11 @@ import org.springframework.util.StringUtils;
 
 @Service
 public class SensorDataService {
-    public static final String SOURCE_REAL_SERIAL = "REAL_SERIAL";
-    public static final String SOURCE_REAL_MQTT = "REAL_MQTT";
-    public static final String SOURCE_MOCK = "MOCK";
+    public static final String SOURCE_REAL_SERIAL = DataSourceUtils.REAL_SERIAL;
+    public static final String SOURCE_REAL_MQTT = DataSourceUtils.REAL_MQTT;
+    public static final String SOURCE_MOCK = DataSourceUtils.MOCK;
+    public static final String SOURCE_MANUAL = DataSourceUtils.MANUAL;
+    public static final String SOURCE_ALL = DataSourceUtils.ALL;
 
     private static final double GAS_WARNING_THRESHOLD = 50.0;
     private static final double TEMPERATURE_WARNING_THRESHOLD = 40.0;
@@ -32,11 +36,17 @@ public class SensorDataService {
 
     private final SensorDataRepository repository;
     private final ObjectMapper objectMapper;
+    private final CacheInvalidationService cacheInvalidationService;
     private final Random random = new Random();
 
-    public SensorDataService(SensorDataRepository repository, ObjectMapper objectMapper) {
+    public SensorDataService(
+        SensorDataRepository repository,
+        ObjectMapper objectMapper,
+        CacheInvalidationService cacheInvalidationService
+    ) {
         this.repository = repository;
         this.objectMapper = objectMapper;
+        this.cacheInvalidationService = cacheInvalidationService;
     }
 
     @Transactional
@@ -48,10 +58,12 @@ public class SensorDataService {
         data.setHumidity(round1(request.getHumidity()));
         data.setGas(round1(request.getGas()));
         data.setStatus(judgeStatus(data.getTemperature(), data.getHumidity(), data.getGas()));
-        data.setDataSource(normalizeSource(request.getDataSource()));
+        data.setDataSource(DataSourceUtils.normalizeWriteSource(request.getDataSource()));
         data.setRawMessage(request.getRawMessage());
         data.setCreatedAt(LocalDateTime.now());
-        return repository.save(data);
+        SensorData saved = repository.save(data);
+        cacheInvalidationService.clearAllDataCaches();
+        return saved;
     }
 
     @Transactional
@@ -85,8 +97,13 @@ public class SensorDataService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(cacheNames = "latestSensorDataCache", key = "#source")
     public Optional<SensorData> latestBySource(String source) {
-        return repository.findTopByDataSourceOrderByCreatedAtDesc(normalizeSource(source));
+        String dataSource = normalizeSource(source);
+        if (SOURCE_ALL.equals(dataSource)) {
+            return repository.findTopByOrderByCreatedAtDesc();
+        }
+        return repository.findTopByDataSourceOrderByCreatedAtDesc(dataSource);
     }
 
     @Transactional(readOnly = true)
@@ -96,9 +113,14 @@ public class SensorDataService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(cacheNames = "recentSensorDataCache", key = "#source + '_' + #limit")
     public List<SensorData> recentBySource(String source, int limit) {
         int boundedLimit = boundLimit(limit);
-        return repository.findByDataSourceOrderByCreatedAtDesc(normalizeSource(source), PageRequest.of(0, boundedLimit));
+        String dataSource = normalizeSource(source);
+        if (SOURCE_ALL.equals(dataSource)) {
+            return repository.findAllByOrderByCreatedAtDesc(PageRequest.of(0, boundedLimit));
+        }
+        return repository.findByDataSourceOrderByCreatedAtDesc(dataSource, PageRequest.of(0, boundedLimit));
     }
 
     @Transactional(readOnly = true)
@@ -110,7 +132,11 @@ public class SensorDataService {
 
     @Transactional(readOnly = true)
     public List<SensorData> allBySource(String source) {
-        return repository.findByDataSourceOrderByCreatedAtDesc(normalizeSource(source));
+        String dataSource = normalizeSource(source);
+        if (SOURCE_ALL.equals(dataSource)) {
+            return all();
+        }
+        return repository.findByDataSourceOrderByCreatedAtDesc(dataSource);
     }
 
     @Transactional(readOnly = true)
@@ -120,7 +146,11 @@ public class SensorDataService {
 
     @Transactional(readOnly = true)
     public List<SensorData> warningsBySource(String source) {
-        return repository.findByStatusAndDataSourceOrderByCreatedAtDesc("WARNING", normalizeSource(source));
+        String dataSource = normalizeSource(source);
+        if (SOURCE_ALL.equals(dataSource)) {
+            return warnings();
+        }
+        return repository.findByStatusAndDataSourceOrderByCreatedAtDesc("WARNING", dataSource);
     }
 
     public String judgeStatus(double temperature, double humidity, double gas) {
@@ -131,14 +161,7 @@ public class SensorDataService {
     }
 
     public String normalizeSource(String source) {
-        if (!StringUtils.hasText(source)) {
-            return SOURCE_MOCK;
-        }
-        String normalized = source.trim().toUpperCase(Locale.ROOT);
-        if (SOURCE_REAL_SERIAL.equals(normalized) || SOURCE_REAL_MQTT.equals(normalized) || SOURCE_MOCK.equals(normalized)) {
-            return normalized;
-        }
-        return SOURCE_MOCK;
+        return DataSourceUtils.normalizeQuerySource(source);
     }
 
     private SensorDataRequest parsePayload(String payload) {

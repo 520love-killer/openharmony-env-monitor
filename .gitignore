@@ -1,5 +1,9 @@
 # Build output
 target/
+dist/
+build/
+.playwright-cli/
+node_modules/
 
 # Runtime data and logs
 data/
@@ -16,3 +20,14 @@ Thumbs.db
 # Environment files
 .env
 .env.*
+*.env
+application-local.yml
+application-secret.yml
+src/main/resources/application-local.yml
+src/main/resources/application-secret.yml
+
+# Database local files
+*.db
+*.sqlite
+*.mv.db
+*.trace.db

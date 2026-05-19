@@ -10,18 +10,29 @@ spring:
   application:
     name: openharmony-env-monitor-platform
   datasource:
-    url: jdbc:h2:file:./data/env_monitor_db
-    driver-class-name: org.h2.Driver
-    username: sa
-    password:
-  h2:
-    console:
-      enabled: true
-      path: /h2-console
+    url: ${MYSQL_URL:jdbc:mysql://localhost:3306/openharmony_env_monitor?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: true
-    properties:
-      hibernate:
-        format_sql: true
+    show-sql: false
+    database-platform: org.hibernate.dialect.MySQLDialect
+  sql:
+    init:
+      mode: never
+
+app:
+  retention:
+    raw-days: ${RAW_RETENTION_DAYS:30}
+    summary-days: ${SUMMARY_RETENTION_DAYS:180}
+    anomaly-days: ${ANOMALY_RETENTION_DAYS:180}
+  analytics:
+    summary-cron: "0 */1 * * * ?"
+    anomaly-cron: "30 */1 * * * ?"
+    cleanup-cron: "0 0 3 * * ?"
+  cache:
+    provider: ${CACHE_PROVIDER:caffeine}
+    ttl-seconds: ${CACHE_TTL_SECONDS:30}
+    max-size: ${CACHE_MAX_SIZE:1000}
