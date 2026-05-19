@@ -3,20 +3,18 @@
     <PageHeader title="最近 50 条数据" :subtitle="sourceLabel" />
 
     <div class="toolbar">
-      <div class="toolbar-item">
-        <StatusBadge type="info">{{ rows.length }}</StatusBadge>
-        条记录
+      <div class="toolbar-left">
+        <StatusBadge type="info">{{ rows.length }} 条</StatusBadge>
+        <span class="toolbar-sep">|</span>
+        <span>更新：<strong>{{ lastTime }}</strong></span>
+        <span class="toolbar-sep">|</span>
+        <span>数据源：<strong>{{ sourceLabel }}</strong></span>
       </div>
-      <div class="toolbar-item">
-        最近更新：<strong>{{ lastTime }}</strong>
-      </div>
-      <div class="toolbar-item">
-        数据源：<strong>{{ sourceLabel }}</strong>
-      </div>
+      <button class="refresh-btn" @click="load">刷新</button>
     </div>
 
     <BaseCard class="table-card">
-      <div class="table-wrap">
+      <div class="table-wrap scrollbar-thin">
         <table>
           <thead>
             <tr>
@@ -26,18 +24,18 @@
               <th>湿度</th>
               <th>燃气</th>
               <th>状态</th>
-              <th>数据来源</th>
+              <th>来源</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="row in rows" :key="row.id">
-              <td>{{ fmt(row.createdAt) }}</td>
-              <td>{{ row.deviceId }}</td>
-              <td>{{ fmt(row.temperature, 1, '℃') }}</td>
-              <td>{{ fmt(row.humidity, 1, '%') }}</td>
-              <td>{{ fmt(row.gas, 1, 'ppm') }}</td>
+              <td class="td-time">{{ fmt(row.createdAt) }}</td>
+              <td class="td-mono">{{ row.deviceId }}</td>
+              <td class="td-num">{{ fmt(row.temperature, 1, '℃') }}</td>
+              <td class="td-num">{{ fmt(row.humidity, 1, '%') }}</td>
+              <td class="td-num">{{ fmt(row.gas, 1, 'ppm') }}</td>
               <td>
-                <StatusBadge :type="row.status === 'WARNING' ? 'warning' : 'safe'">
+                <StatusBadge :type="row.status === 'WARNING' ? 'warning' : 'safe'" :dot="row.status === 'SAFE'">
                   {{ row.status }}
                 </StatusBadge>
               </td>
@@ -46,7 +44,7 @@
               </td>
             </tr>
             <tr v-if="rows.length === 0">
-              <td colspan="7" class="empty">等待 Hi3861 真实设备数据。</td>
+              <td colspan="7" class="empty">等待 Hi3861 真实设备数据...</td>
             </tr>
           </tbody>
         </table>
@@ -66,14 +64,13 @@ import type { SensorData } from '@/types'
 
 const agentStore = useAgentStore()
 const source = computed(() => agentStore.source)
-
 const rows = ref<SensorData[]>([])
 
 const sourceMap: Record<string, string> = {
-  REAL_SERIAL: '真实串口数据',
-  REAL_MQTT: '真实 MQTT 数据',
-  MOCK: '模拟演示数据',
-  ALL: '全部数据',
+  REAL_SERIAL: 'REAL_SERIAL',
+  REAL_MQTT: 'REAL_MQTT',
+  MOCK: 'MOCK',
+  ALL: 'ALL',
 }
 
 const sourceLabel = computed(() => sourceMap[source.value] || source.value)
@@ -99,15 +96,43 @@ function fmt(v: any, d?: number, u?: string) {
 </script>
 
 <style scoped>
-.toolbar { display: flex; align-items: center; gap: 12px; padding: 12px 0; font-size: 13px; color: #64748b; margin-bottom: 8px; }
-.toolbar-item { display: flex; align-items: center; gap: 6px; }
+.toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 0; font-size: 13px; color: var(--text-muted); margin-bottom: 8px;
+}
+.toolbar-left { display: flex; align-items: center; gap: 10px; }
+.toolbar-sep { color: rgba(148,163,184,0.20); }
+.toolbar strong { color: var(--text-primary); font-weight: 600; }
+.refresh-btn {
+  background: rgba(56, 189, 248, 0.10);
+  border: 1px solid rgba(56, 189, 248, 0.20);
+  color: var(--blue);
+  padding: 5px 14px; border-radius: 8px; cursor: pointer;
+  font-size: 12px; font-weight: 500; transition: all 0.2s;
+}
+.refresh-btn:hover { background: rgba(56, 189, 248, 0.18); }
+
 .table-card { overflow: hidden; }
-.table-wrap { overflow-x: auto; }
-table { width: 100%; min-width: 920px; border-collapse: collapse; }
-th, td { border-bottom: 1px solid #e5edf7; padding: 11px 10px; text-align: left; }
-th { color: #64748b; font-size: 13px; background: #f8fbff; font-weight: 600; }
-td { line-height: 1.45; font-size: 13px; }
+.table-wrap { overflow-x: auto; overflow-y: auto; max-height: 600px; }
+table { width: 100%; min-width: 860px; border-collapse: collapse; }
+th {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  padding: 13px 12px; text-align: left;
+  color: var(--text-muted); font-size: 11px;
+  font-weight: 600; letter-spacing: 0.5px;
+  text-transform: uppercase;
+  background: rgba(15, 23, 42, 0.50);
+  position: sticky; top: 0; z-index: 1;
+}
+td {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+  padding: 11px 12px; line-height: 1.4; font-size: 13px;
+  color: var(--text-primary);
+}
+tr:hover td { background: rgba(56, 189, 248, 0.04); }
 tr:last-child td { border-bottom: 0; }
-tr:hover td { background: #f8fbff; }
-.empty { text-align: center; color: #64748b; padding: 24px; }
+.td-time { white-space: nowrap; font-size: 12px; }
+.td-mono { font-family: "Cascadia Code", "Fira Code", monospace; font-size: 12px; color: var(--text-muted); }
+.td-num { font-weight: 600; font-variant-numeric: tabular-nums; }
+.empty { text-align: center; color: var(--text-dim); padding: 32px; }
 </style>

@@ -18,17 +18,18 @@ defineProps<{
 
 <style scoped>
 .page-header {
-  margin-bottom: 20px;
+  margin-bottom: 22px;
   padding: 4px 0 0;
 }
 .page-header h1 {
   font-size: 28px;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--text-heading);
+  letter-spacing: -0.3px;
 }
 .page-header p {
   font-size: 14px;
-  color: #64748b;
+  color: var(--text-muted);
   margin-top: 6px;
 }
 .page-header-extra {

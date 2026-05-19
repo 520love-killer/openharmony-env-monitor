@@ -1,6 +1,6 @@
 <template>
   <span class="badge" :class="typeClass">
-    <span v-if="dot" class="dot" />
+    <span v-if="dot" class="badge-dot" :class="dotClass" />
     <slot />
   </span>
 </template>
@@ -9,12 +9,15 @@
 import { computed } from 'vue'
 
 const props = defineProps<{
-  type?: 'safe' | 'warning' | 'deepseek' | 'mock' | 'serial' | 'info' | 'primary'
+  type?: 'safe' | 'warning' | 'danger' | 'deepseek' | 'mock' | 'serial' | 'info' | 'primary'
   dot?: boolean
 }>()
 
-const typeClass = computed(() => {
-  return props.type ? `badge-${props.type}` : ''
+const typeClass = computed(() => props.type ? `badge-${props.type}` : '')
+const dotClass = computed(() => {
+  if (props.type === 'safe') return 'dot-safe'
+  if (props.type === 'warning' || props.type === 'danger') return 'dot-danger'
+  return 'dot-info'
 })
 </script>
 
@@ -25,21 +28,30 @@ const typeClass = computed(() => {
   gap: 6px;
   min-height: 26px;
   border-radius: 999px;
-  padding: 3px 10px;
-  font-size: 12px;
-  font-weight: 500;
+  padding: 3px 12px;
+  font-size: 11px;
+  font-weight: 600;
   white-space: nowrap;
+  letter-spacing: 0.3px;
 }
-.dot {
+.badge-dot {
   width: 7px; height: 7px; border-radius: 50%;
 }
-.badge-safe { color: #059669; background: #ecfdf5; }
-.badge-safe .dot { background: #10b981; box-shadow: 0 0 5px rgba(16,185,129,0.4); }
-.badge-warning { color: #dc2626; background: #fef2f2; }
-.badge-warning .dot { background: #ef4444; }
-.badge-deepseek { color: #7c3aed; background: #f5f3ff; }
-.badge-mock { color: #d97706; background: #fffbeb; }
-.badge-serial { color: #059669; background: #ecfdf5; }
-.badge-info { color: #2563eb; background: #eff6ff; }
-.badge-primary { color: #2563eb; background: #eff6ff; }
+.dot-safe { background: var(--green); box-shadow: 0 0 6px rgba(34, 197, 94, 0.5); animation: breath 2s ease-in-out infinite; }
+.dot-danger { background: var(--red); box-shadow: 0 0 6px rgba(239, 68, 68, 0.4); }
+.dot-info { background: var(--blue); box-shadow: 0 0 6px rgba(56, 189, 248, 0.4); }
+
+@keyframes breath {
+  0%, 100% { opacity: 1; box-shadow: 0 0 6px rgba(34, 197, 94, 0.5); }
+  50% { opacity: 0.5; box-shadow: 0 0 14px rgba(34, 197, 94, 0.8); }
+}
+
+.badge-safe { color: #4ade80; background: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.22); }
+.badge-warning { color: #fca5a5; background: rgba(239, 68, 68, 0.14); border: 1px solid rgba(239, 68, 68, 0.25); }
+.badge-danger { color: #fca5a5; background: rgba(239, 68, 68, 0.18); border: 1px solid rgba(239, 68, 68, 0.35); box-shadow: 0 0 12px rgba(239, 68, 68, 0.12); }
+.badge-deepseek { color: #c4b5fd; background: rgba(139, 92, 246, 0.15); border: 1px solid rgba(139, 92, 246, 0.28); }
+.badge-mock { color: #fcd34d; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.22); }
+.badge-serial { color: #67e8f9; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.22); }
+.badge-info { color: #93c5fd; background: rgba(59, 130, 246, 0.12); border: 1px solid rgba(59, 130, 246, 0.20); }
+.badge-primary { color: #93c5fd; background: rgba(59, 130, 246, 0.14); border: 1px solid rgba(59, 130, 246, 0.25); }
 </style>

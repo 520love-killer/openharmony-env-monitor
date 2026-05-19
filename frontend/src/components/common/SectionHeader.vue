@@ -16,18 +16,20 @@ defineProps<{
   margin-bottom: 14px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 .section-header::before {
   content: '';
   width: 4px;
-  height: 20px;
+  height: 22px;
   border-radius: 4px;
-  background: linear-gradient(180deg, #2563eb, #7c3aed);
+  background: linear-gradient(180deg, var(--blue), var(--purple));
+  box-shadow: 0 0 14px var(--blue-glow);
 }
 .section-header h2 {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--text-heading);
+  letter-spacing: -0.2px;
 }
 </style>

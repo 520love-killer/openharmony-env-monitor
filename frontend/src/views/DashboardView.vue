@@ -1,10 +1,10 @@
 <template>
   <div class="page-shell">
-    <PageHeader title="数据看板" subtitle="实时传感器数据展示" />
+    <PageHeader title="数据看板" subtitle="实时传感器数据 · 环境监测大屏" />
 
     <BaseCard class="info-banner">
       <span class="info-dot" />
-      默认读取真实串口数据。当前数据源：<strong>{{ sourceLabel }}</strong>
+      数据通道：<strong>{{ sourceLabel }}</strong> · Hi3861 串口直连
     </BaseCard>
 
     <div class="metric-grid">
@@ -23,8 +23,8 @@
     <SectionHeader title="趋势图" />
     <div class="chart-grid">
       <SensorLineChart title="🌡 温度变化" :labels="labels" :values="temps" color="#f97316" />
-      <SensorLineChart title="💧 湿度变化" :labels="labels" :values="humidities" color="#0ea5e9" />
-      <SensorLineChart title="🔥 燃气浓度变化" :labels="labels" :values="gasValues" color="#8b5cf6" />
+      <SensorLineChart title="💧 湿度变化" :labels="labels" :values="humidities" color="#38bdf8" />
+      <SensorLineChart title="🔥 燃气浓度变化" :labels="labels" :values="gasValues" color="#a78bfa" />
     </div>
 
     <SectionHeader title="智能环境摘要" />
@@ -41,10 +41,10 @@
       <BaseCard class="insight-card">
         <h4>🚀 快速操作</h4>
         <div class="quick-actions">
-          <router-link to="/recent">查看最近数据</router-link>
-          <router-link to="/analytics">查看统计分析</router-link>
-          <router-link to="/forecast">查看温度预测</router-link>
-          <router-link to="/agent">询问温度计 Agent</router-link>
+          <router-link to="/recent">→ 查看最近数据</router-link>
+          <router-link to="/analytics">→ 查看统计分析</router-link>
+          <router-link to="/forecast">→ 查看温度预测</router-link>
+          <router-link to="/agent">→ 询问温度计 Agent</router-link>
         </div>
       </BaseCard>
     </div>
@@ -66,10 +66,10 @@ const agentStore = useAgentStore()
 const source = computed(() => agentStore.source)
 const sourceLabel = computed(() => {
   const map: Record<string, string> = {
-    REAL_SERIAL: '真实串口数据',
-    REAL_MQTT: '真实 MQTT 数据',
-    MOCK: '模拟演示数据',
-    ALL: '全部数据',
+    REAL_SERIAL: 'REAL_SERIAL',
+    REAL_MQTT: 'REAL_MQTT',
+    MOCK: 'MOCK',
+    ALL: 'ALL',
   }
   return map[source.value] || source.value
 })
@@ -87,23 +87,23 @@ const tempColor = computed(() => {
   const t = Number(latest.value?.temperature)
   if (t > 35) return '#ef4444'
   if (t > 28) return '#f59e0b'
-  return '#10b981'
+  return '#22c55e'
 })
 
 const metrics = computed(() => {
   if (!hasData.value || !latest.value) {
-    return [{ icon: '⏳', label: '状态', value: '等待 Hi3861 真实设备数据。', iconBg: '#f3f4f6', iconColor: '#64748b' }]
+    return [{ icon: '⏳', label: '状态', value: '等待 Hi3861 设备数据...', iconBg: 'rgba(148,163,184,0.10)', iconColor: '#94a3b8' }]
   }
   const d = latest.value
   return [
-    { icon: '🖥', label: '设备 ID', value: d.deviceId, iconBg: '#eff6ff', iconColor: '#2563eb' },
-    { icon: '🌡', label: '温度', value: fmt(d.temperature, 1, '℃'), iconBg: '#fff7ed', iconColor: '#f97316', valueColor: tempColor.value },
-    { icon: '💧', label: '湿度', value: fmt(d.humidity, 1, '%'), iconBg: '#f0f9ff', iconColor: '#0ea5e9' },
-    { icon: '🔥', label: '燃气浓度', value: fmt(d.gas, 1, 'ppm'), iconBg: '#f5f3ff', iconColor: '#8b5cf6' },
-    { icon: '🛡', label: '安全状态', value: d.status, iconBg: d.status === 'WARNING' ? '#fef2f2' : '#ecfdf5', iconColor: d.status === 'WARNING' ? '#ef4444' : '#10b981', valueColor: d.status === 'WARNING' ? '#ef4444' : '#10b981' },
-    { icon: '📡', label: '数据来源', value: sourceLabel.value, iconBg: '#f5f3ff', iconColor: '#7c3aed' },
-    { icon: '🕐', label: '更新时间', value: fmt(d.createdAt), iconBg: '#f3f4f6', iconColor: '#64748b' },
-    { icon: '🔌', label: '设备连接', value: d.dataSource === 'MOCK' ? '模拟演示数据' : 'Hi3861 真实设备', iconBg: '#ecfdf5', iconColor: '#10b981' },
+    { icon: '🖥', label: '设备 ID', value: d.deviceId, iconBg: 'rgba(56,189,248,0.12)', iconColor: '#38bdf8' },
+    { icon: '🌡', label: '温度', value: fmt(d.temperature, 1, '℃'), iconBg: 'rgba(249,115,22,0.12)', iconColor: '#f97316', valueColor: tempColor.value },
+    { icon: '💧', label: '湿度', value: fmt(d.humidity, 1, '%'), iconBg: 'rgba(56,189,248,0.10)', iconColor: '#38bdf8' },
+    { icon: '🔥', label: '燃气浓度', value: fmt(d.gas, 1, 'ppm'), iconBg: 'rgba(139,92,246,0.12)', iconColor: '#a78bfa' },
+    { icon: '🛡', label: '安全状态', value: d.status, iconBg: d.status === 'WARNING' ? 'rgba(239,68,68,0.14)' : 'rgba(34,197,94,0.12)', iconColor: d.status === 'WARNING' ? '#ef4444' : '#22c55e', valueColor: d.status === 'WARNING' ? '#ef4444' : '#22c55e' },
+    { icon: '📡', label: '数据来源', value: sourceLabel.value, iconBg: 'rgba(139,92,246,0.12)', iconColor: '#a78bfa' },
+    { icon: '🕐', label: '更新时间', value: fmt(d.createdAt), iconBg: 'rgba(148,163,184,0.10)', iconColor: '#94a3b8' },
+    { icon: '🔌', label: '设备连接', value: d.dataSource === 'MOCK' ? '模拟数据' : 'Hi3861 真实设备', iconBg: 'rgba(34,197,94,0.12)', iconColor: '#22c55e' },
   ]
 })
 
@@ -111,7 +111,7 @@ const summaryText = computed(() => {
   if (!hasData.value || !latest.value) return '等待更多真实数据...'
   const d = latest.value
   const safe = d.status === 'SAFE'
-  return `当前环境总体${safe ? '安全' : '存在风险'}，温度处于${d.temperature > 35 ? '偏高' : '正常'}范围，湿度${d.humidity > 80 ? '偏高' : '稳定'}，燃气浓度${d.gas > 300 ? '超过风险阈值' : '未超过风险阈值'}。`
+  return `当前环境总体${safe ? '安全' : '存在风险'}，温度处于${Number(d.temperature) > 35 ? '偏高' : '正常'}范围，湿度${Number(d.humidity) > 80 ? '偏高' : '稳定'}，燃气浓度${Number(d.gas) > 300 ? '超过风险阈值' : '未超过风险阈值'}。`
 })
 
 const changeText = computed(() => {
@@ -121,7 +121,7 @@ const changeText = computed(() => {
   const dt = Number(last.temperature) - Number(first.temperature)
   const dh = Number(last.humidity) - Number(first.humidity)
   const dg = Number(last.gas) - Number(first.gas)
-  return `温度${dt >= 0 ? '上升' : '下降'} ${Math.abs(dt).toFixed(1)}℃，湿度${dh >= 0 ? '上升' : '下降'} ${Math.abs(dh).toFixed(1)}%，燃气${dg >= 0 ? '上升' : '下降'} ${Math.abs(dg).toFixed(1)} ppm。`
+  return `温度${dt >= 0 ? '↑' : '↓'} ${Math.abs(dt).toFixed(1)}℃，湿度${dh >= 0 ? '↑' : '↓'} ${Math.abs(dh).toFixed(1)}%，燃气${dg >= 0 ? '↑' : '↓'} ${Math.abs(dg).toFixed(1)} ppm。`
 })
 
 const lastUpdate = computed(() => {
@@ -164,12 +164,23 @@ function num(v: any) {
 <style scoped>
 .info-banner {
   display: flex; align-items: center; gap: 10px;
-  padding: 12px 16px; margin-bottom: 20px;
-  border-left: 4px solid #2563eb; font-size: 14px; color: #1f2937;
+  padding: 12px 18px; margin-bottom: 20px;
+  border-left: 4px solid var(--blue);
+  font-size: 13px; color: var(--text-muted);
+  background: linear-gradient(90deg, rgba(56,189,248,0.06), transparent);
 }
 .info-dot {
-  width: 8px; height: 8px; border-radius: 50%; background: #2563eb;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--blue);
+  box-shadow: 0 0 8px var(--blue-glow);
+  animation: breath 2s ease-in-out infinite;
 }
+@keyframes breath {
+  0%, 100% { opacity: 1; box-shadow: 0 0 8px rgba(56,189,248,0.4); }
+  50% { opacity: 0.5; box-shadow: 0 0 16px rgba(56,189,248,0.8); }
+}
+.info-banner strong { color: var(--text-primary); }
+
 .metric-grid {
   display: grid;
   gap: 16px;
@@ -187,17 +198,22 @@ function num(v: any) {
   gap: 20px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
-.insight-card { padding: 20px; }
-.insight-card h4 { font-size: 15px; font-weight: 600; color: #0f172a; margin-bottom: 10px; }
-.insight-card p { font-size: 13px; color: #64748b; line-height: 1.7; }
-.insight-time { font-size: 11px; color: #94a3b8; margin-top: 8px; }
+.insight-card { padding: 22px; }
+.insight-card h4 { font-size: 15px; font-weight: 600; color: var(--text-heading); margin-bottom: 12px; }
+.insight-card p { font-size: 13px; color: var(--text-muted); line-height: 1.7; }
+.insight-time { font-size: 11px; color: var(--text-dim); margin-top: 10px; }
 .quick-actions { display: flex; flex-direction: column; gap: 8px; }
 .quick-actions a {
-  display: block; padding: 8px 12px; border-radius: 8px;
-  background: #f8fbff; color: #2563eb; text-decoration: none;
-  font-size: 13px; font-weight: 500; transition: all 0.15s;
+  display: block; padding: 10px 14px; border-radius: 10px;
+  background: rgba(56, 189, 248, 0.06);
+  color: var(--blue); text-decoration: none;
+  font-size: 13px; font-weight: 500; transition: all 0.2s;
+  border: 1px solid transparent;
 }
-.quick-actions a:hover { background: #eff6ff; }
+.quick-actions a:hover {
+  background: rgba(56, 189, 248, 0.10);
+  border-color: rgba(56, 189, 248, 0.20);
+}
 @media (max-width: 1024px) {
   .insight-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

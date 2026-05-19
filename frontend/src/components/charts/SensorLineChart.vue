@@ -30,26 +30,62 @@ const props = defineProps<{
 const hasData = computed(() => props.values.length > 0)
 
 const option = computed(() => ({
-  tooltip: { trigger: 'axis' },
-  grid: { left: 10, right: 10, top: 10, bottom: 20, containLabel: true },
-  xAxis: { type: 'category', data: props.labels, axisLabel: { fontSize: 11 } },
-  yAxis: { type: 'value', axisLabel: { fontSize: 11 } },
+  backgroundColor: 'transparent',
+  tooltip: {
+    trigger: 'axis',
+    backgroundColor: 'rgba(15, 23, 42, 0.92)',
+    borderColor: 'rgba(56, 189, 248, 0.3)',
+    textStyle: { color: '#e5f0ff', fontSize: 12 },
+  },
+  grid: { left: 8, right: 16, top: 10, bottom: 20, containLabel: true },
+  xAxis: {
+    type: 'category',
+    data: props.labels,
+    axisLabel: { fontSize: 10, color: '#94a3b8' },
+    axisLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.15)' } },
+    axisTick: { show: false },
+  },
+  yAxis: {
+    type: 'value',
+    axisLabel: { fontSize: 10, color: '#94a3b8' },
+    splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.08)' } },
+    axisLine: { show: false },
+    axisTick: { show: false },
+  },
   series: [{
     type: 'line',
     data: props.values,
     smooth: true,
     symbol: 'circle',
-    symbolSize: 4,
-    lineStyle: { color: props.color, width: 2 },
+    symbolSize: 5,
+    lineStyle: { color: props.color, width: 2.5, shadowBlur: 8, shadowColor: props.color },
     itemStyle: { color: props.color },
-    areaStyle: { color: props.color, opacity: 0.08 },
+    areaStyle: {
+      color: {
+        type: 'linear',
+        x: 0, y: 0, x2: 0, y2: 1,
+        colorStops: [
+          { offset: 0, color: props.color + '30' },
+          { offset: 1, color: props.color + '02' },
+        ],
+      },
+    },
   }],
 }))
 </script>
 
 <style scoped>
-.chart-card { padding: 14px; display: flex; flex-direction: column; min-width: 0; height: 320px; }
-.chart-title { font-size: 15px; font-weight: 600; margin-bottom: 10px; color: #0f172a; flex-shrink: 0; }
+.chart-card {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: 330px;
+}
+.chart-title {
+  font-size: 14px; font-weight: 600; margin-bottom: 10px;
+  color: var(--text-heading); flex-shrink: 0;
+}
 .chart-wrap { flex: 1; min-height: 0; position: relative; }
 .chart { width: 100%; height: 100%; }
 </style>

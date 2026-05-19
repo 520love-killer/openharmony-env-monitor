@@ -4,6 +4,7 @@
       <div class="metric-icon" :style="{ background: iconBg, color: iconColor }">
         {{ icon }}
       </div>
+      <div class="metric-glow-line" />
     </div>
     <span class="metric-label">{{ label }}</span>
     <strong class="metric-value" :style="valueStyle">{{ value }}</strong>
@@ -31,11 +32,11 @@ const valueStyle = computed(() => {
 
 <style scoped>
 .metric-card {
-  padding: 16px;
+  padding: 18px 20px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  min-height: 110px;
+  gap: 10px;
+  min-height: 120px;
 }
 .metric-top {
   display: flex;
@@ -43,23 +44,33 @@ const valueStyle = computed(() => {
   align-items: center;
 }
 .metric-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  font-size: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.20);
+}
+.metric-glow-line {
+  height: 1px;
+  width: 40px;
+  background: linear-gradient(90deg, rgba(56,189,248,0.25), transparent);
+  border-radius: 1px;
 }
 .metric-label {
-  font-size: 13px;
-  color: #64748b;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+  letter-spacing: 0.3px;
 }
 .metric-value {
-  font-size: 21px;
-  font-weight: 700;
-  color: #0f172a;
-  line-height: 1.35;
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--text-heading);
+  line-height: 1.2;
   word-break: break-word;
+  letter-spacing: -0.3px;
 }
 </style>

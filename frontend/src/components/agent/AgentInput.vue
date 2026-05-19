@@ -3,7 +3,7 @@
     <textarea
       v-model="text"
       rows="2"
-      placeholder="请输入你的问题，例如：分析当前温度变化趋势..."
+      placeholder="输入问题，例如：分析当前温度变化趋势..."
       @keydown="onKeydown"
       @focus="focused = true"
       @blur="focused = false"
@@ -14,8 +14,10 @@
         <button class="btn-ghost" title="使用工具" @click="emit('tools')">🔧 工具</button>
       </div>
       <div class="chat-input-btns">
-        <button class="btn-ghost" @click="emit('clear')">🗑 清空</button>
-        <button class="btn-primary" :disabled="disabled || !text.trim()" @click="send">➤ 发送</button>
+        <button class="btn-ghost" @click="emit('clear')">🗑</button>
+        <button class="btn-send" :disabled="disabled || !text.trim()" @click="send">
+          <span class="send-icon">➤</span> 发送
+        </button>
       </div>
     </div>
   </div>
@@ -55,39 +57,49 @@ function onKeydown(e: KeyboardEvent) {
 
 <style scoped>
 .chat-input-wrapper {
-  border: 1.5px solid rgba(148,163,184,0.22);
+  border: 1.5px solid rgba(56, 189, 248, 0.25);
   border-radius: 16px;
   overflow: hidden;
   transition: border-color 0.2s, box-shadow 0.2s;
-  background: #fff;
+  background: rgba(2, 6, 23, 0.65);
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.06);
 }
 .chat-input-wrapper.focused {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37,99,235,0.08);
+  border-color: var(--blue);
+  box-shadow: 0 0 24px rgba(56, 189, 248, 0.15);
 }
 .chat-input-wrapper textarea {
-  width: 100%; border: none; padding: 12px 14px; font-size: 14px; resize: none;
-  min-height: 52px; max-height: 100px; font-family: inherit; line-height: 1.5; outline: none;
-  background: transparent; color: #1f2937;
+  width: 100%; border: none; padding: 12px 16px; font-size: 14px; resize: none;
+  min-height: 52px; max-height: 100px; font-family: inherit; line-height: 1.6; outline: none;
+  background: transparent; color: var(--text-primary);
 }
-.chat-input-wrapper textarea::placeholder { color: #9ca3af; }
+.chat-input-wrapper textarea::placeholder { color: var(--text-dim); }
 .chat-input-row {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 8px 12px; background: #f8fbff; border-top: 1px solid #eef3f9;
+  padding: 8px 12px;
+  background: rgba(15, 23, 42, 0.45);
+  border-top: 1px solid rgba(148, 163, 184, 0.10);
 }
 .chat-input-actions { display: flex; gap: 2px; }
-.chat-input-btns { display: flex; gap: 8px; }
+.chat-input-btns { display: flex; gap: 8px; align-items: center; }
 .btn-ghost {
   background: none; border: 1px solid transparent; border-radius: 8px;
-  padding: 5px 10px; font-size: 12px; cursor: pointer; color: #64748b;
+  padding: 5px 10px; font-size: 12px; cursor: pointer; color: var(--text-muted);
   transition: all 0.15s; white-space: nowrap;
 }
-.btn-ghost:hover { background: #f3f4f6; color: #1f2937; }
-.btn-primary {
-  min-height: 32px; border: none; background: linear-gradient(135deg, #2563eb, #1d4ed8);
-  color: #fff; border-radius: 8px; padding: 6px 18px; cursor: pointer; font-weight: 600;
-  font-size: 13px; transition: all 0.15s; box-shadow: 0 2px 6px rgba(37,99,235,0.25);
+.btn-ghost:hover { background: rgba(148, 163, 184, 0.08); color: var(--text-primary); }
+.btn-send {
+  min-height: 34px; border: none;
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  color: #fff; border-radius: 10px; padding: 6px 20px; cursor: pointer; font-weight: 600;
+  font-size: 13px; transition: all 0.2s;
+  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.30);
+  display: flex; align-items: center; gap: 4px;
 }
-.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 10px rgba(37,99,235,0.3); }
-.btn-primary:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: none; }
+.btn-send:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 24px rgba(37, 99, 235, 0.40), 0 0 20px rgba(139, 92, 246, 0.15);
+}
+.btn-send:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+.send-icon { font-size: 14px; }
 </style>

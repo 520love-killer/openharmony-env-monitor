@@ -62,9 +62,6 @@ async function loadRealtime() {
 }
 
 function onQuick(q: string) {
-  // This could emit to AgentChat, but AgentChat handles its own input via store.
-  // Simpler: AgentChat listens to a global quick-prompt event, or we can skip direct wiring.
-  // For now, use a simple event bus or window event.
   window.dispatchEvent(new CustomEvent('agent-quick-prompt', { detail: q }))
 }
 

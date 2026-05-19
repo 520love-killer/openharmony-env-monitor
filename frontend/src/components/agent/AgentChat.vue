@@ -1,15 +1,19 @@
 <template>
   <BaseCard class="chat-panel">
     <div class="chat-header">
-      <h3>💬 智能会话</h3>
+      <div class="chat-header-left">
+        <span class="chat-header-icon">●</span>
+        <h3>智能会话</h3>
+      </div>
       <button class="btn-text" @click="clear">清空会话</button>
     </div>
 
     <div ref="chatBodyRef" class="chat-body scrollbar-thin">
       <div v-if="!session || session.messages.length === 0" class="chat-welcome">
-        <p>👋 你好！我是 <strong>温度计</strong>，你的环境监测智能助手。</p>
-        <p>你可以直接提问，或使用右侧工具与快捷提问获取更精准的分析。</p>
-        <p class="chat-note">当前优先使用 <strong>{{ source }}</strong> 数据。如果只有 MOCK 数据，我会明确说明。</p>
+        <div class="welcome-icon">🌡</div>
+        <p>我是 <strong>温度计 Agent</strong>，你的环境监测智能助手。</p>
+        <p>可以直接提问，或使用右侧工具与快捷提问获取精准分析。</p>
+        <p class="chat-note">数据源：<code>{{ source }}</code></p>
       </div>
 
       <AgentMessage
@@ -35,7 +39,7 @@
         @send="send"
         @clear="clear"
       />
-      <p class="chat-hint">你可以直接提问，或使用右侧工具与快捷提问获取更精准的分析。</p>
+      <p class="chat-hint">Enter 发送 · Shift+Enter 换行</p>
     </div>
   </BaseCard>
 </template>
@@ -55,7 +59,6 @@ const props = defineProps<{
 
 const agentStore = useAgentStore()
 const chatBodyRef = ref<HTMLDivElement>()
-const quickPrompt = ref('')
 
 const session = computed(() => agentStore.currentSession)
 const isStreaming = computed(() => agentStore.isStreaming)
@@ -200,21 +203,46 @@ function formatTime(d: Date) {
 }
 .chat-header {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 14px 22px; border-bottom: 1px solid #eef3f9; flex-shrink: 0;
+  padding: 14px 22px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  flex-shrink: 0;
 }
-.chat-header h3 { font-size: 15px; font-weight: 600; color: #0f172a; }
+.chat-header-left { display: flex; align-items: center; gap: 8px; }
+.chat-header-icon {
+  color: var(--green);
+  font-size: 10px;
+  animation: breath 2s ease-in-out infinite;
+}
+@keyframes breath {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+.chat-header h3 { font-size: 15px; font-weight: 600; color: var(--text-heading); }
 .btn-text {
-  background: none; border: none; color: #64748b; cursor: pointer;
-  font-size: 12px; padding: 4px 8px; border-radius: 6px; transition: all 0.15s;
+  background: none; border: 1px solid rgba(148,163,184,0.15); color: var(--text-muted); cursor: pointer;
+  font-size: 11px; padding: 4px 10px; border-radius: 6px; transition: all 0.2s;
 }
-.btn-text:hover { color: #ef4444; background: #fef2f2; }
+.btn-text:hover { color: var(--red); border-color: rgba(239,68,68,0.3); background: rgba(239,68,68,0.08); }
+
 .chat-body {
-  flex: 1; padding: 20px 22px; overflow-y: auto; background: #f5f8fc;
+  flex: 1; padding: 20px 22px; overflow-y: auto;
+  background: rgba(2, 6, 23, 0.35);
   scroll-behavior: smooth; min-height: 0;
 }
 .chat-welcome { text-align: center; padding: 60px 20px; }
-.chat-welcome p { color: #64748b; margin-bottom: 8px; line-height: 1.6; font-size: 14px; }
+.chat-welcome p { color: var(--text-muted); margin-bottom: 10px; line-height: 1.7; font-size: 14px; }
+.chat-welcome strong { color: var(--text-primary); }
 .chat-note { font-size: 12px !important; }
-.chat-footer { padding: 16px 22px; border-top: 1px solid #eef3f9; background: #fff; flex-shrink: 0; }
-.chat-hint { font-size: 11px; color: #64748b; text-align: center; margin-top: 8px; }
+.chat-note code {
+  background: rgba(56,189,248,0.12); color: var(--blue); padding: 2px 7px;
+  border-radius: 4px; font-family: "Cascadia Code", "Fira Code", monospace; font-size: 11px;
+}
+.welcome-icon { font-size: 40px; margin-bottom: 16px; }
+
+.chat-footer {
+  padding: 16px 22px;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+  flex-shrink: 0;
+}
+.chat-hint { font-size: 11px; color: var(--text-dim); text-align: center; margin-top: 8px; }
 </style>

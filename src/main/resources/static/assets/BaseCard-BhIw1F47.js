@@ -1,1 +1,0 @@
-import{h as s,e as o,o as t,w as r,t as c,_ as n}from"./index-DxqzoU0g.js";const l=s({__name:"BaseCard",props:{flat:{type:Boolean}},setup(a){return(e,d)=>(c(),o("div",{class:t(["card-base card-hover",{flat:a.flat}])},[r(e.$slots,"default",{},void 0)],2))}}),_=n(l,[["__scopeId","data-v-f90bcb16"]]);export{_ as B};
