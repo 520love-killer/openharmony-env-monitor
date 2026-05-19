@@ -64,32 +64,7 @@
             <div class="agent-main">
                 <div class="agent-hero">
                     <div class="agent-avatar" id="agentAvatar">
-                        <svg viewBox="0 0 120 240" class="thermometer-svg">
-                            <defs>
-                                <linearGradient id="thermGrad" x1="0" y1="1" x2="0" y2="0">
-                                    <stop offset="0%" stop-color="#3b82f6"/>
-                                    <stop offset="40%" stop-color="#60a5fa"/>
-                                    <stop offset="70%" stop-color="#f59e0b"/>
-                                    <stop offset="100%" stop-color="#ef4444"/>
-                                </linearGradient>
-                                <filter id="glow">
-                                    <feGaussianBlur stdDeviation="3" result="blur"/>
-                                    <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-                                </filter>
-                            </defs>
-                            <rect x="42" y="60" width="36" height="160" rx="18" fill="url(#thermGrad)" filter="url(#glow)"/>
-                            <circle cx="60" cy="210" r="28" fill="#ef4444" filter="url(#glow)"/>
-                            <circle cx="48" cy="195" r="5" fill="white" opacity="0.6"/>
-                            <circle cx="57" cy="90" r="4" fill="white" opacity="0.4"/>
-                            <circle cx="57" cy="110" r="4" fill="white" opacity="0.4"/>
-                            <circle cx="57" cy="130" r="4" fill="white" opacity="0.4"/>
-                            <circle cx="57" cy="150" r="4" fill="white" opacity="0.4"/>
-                            <circle cx="60" cy="205" r="4" fill="white" opacity="0.8"/>
-                            <circle cx="52" cy="202" r="3" fill="white" opacity="0.8"/>
-                            <circle cx="48" cy="204" r="2" fill="white" opacity="0.6"/>
-                            <circle cx="68" cy="202" r="3" fill="white" opacity="0.8"/>
-                            <text x="60" y="22" text-anchor="middle" fill="#1e40af" font-size="14" font-weight="bold">温度计</text>
-                        </svg>
+                        <img src="/agent-thermometer.svg" alt="温度计 Agent 形象">
                     </div>
                     <div class="agent-info">
                         <h1>温度计 · 环境监测智能助手</h1>
@@ -209,14 +184,8 @@
                 <p>基于 OpenHarmony Hi3861 的环境监测预警系统，硬件端采集温度、湿度、燃气数据，通过串口或 MQTT 实时传输到 Spring Boot 后端，存储到 MySQL 数据库，Web Dashboard 提供数据可视化、统计分析、温度预测和异常检测功能。</p>
                 <h3>v2.0 核心变化</h3>
                 <p>v2.0 将系统从传统 Dashboard 升级为以 <strong>温度计 Agent</strong> 为核心的智能环境分析平台。Agent 成为默认主页面，可自动调用后端工具分析数据、解释算法、生成报告。</p>
-                <h3>技术栈</h3>
-                <table><thead><tr><th>层级</th><th>技术</th></tr></thead><tbody>
-                <tr><td>硬件</td><td>Hi3861 + MQ-2 + AHT20 + OLED</td></tr>
-                <tr><td>后端</td><td>Spring Boot 3.3 + JPA + MySQL + Caffeine Cache</td></tr>
-                <tr><td>前端</td><td>Vanilla JS + Chart.js + CSS Grid</td></tr>
-                <tr><td>Agent</td><td>结构化 RAG + Tool Calling + Mock Agent</td></tr>
-                <tr><td>数据接入</td><td>串口 (jSerialComm) + MQTT 预留</td></tr>
-                </tbody></table>
+                <h3>数据真实性</h3>
+                <p>页面默认读取 REAL_SERIAL 真实串口数据；如果切换到 MOCK，页面和 Agent 回答都会明确标记为模拟演示数据。完整技术栈、运行命令和扩展方案请查看 README。</p>
                 <h3>算法说明</h3>
                 <p>使用滑动平均、线性回归、指数平滑进行短期温度预测，结合阈值检测、突变检测、连续升高检测进行异常诊断。适合趋势判断和短期预警，不是工业级精确温控模型。</p>
             </div>

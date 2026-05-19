@@ -200,7 +200,7 @@ v2.0 将系统从传统环境监测 Dashboard 升级为以 Agent 为核心的智
 4. Agent 可解释使用的算法和预测置信度
 5. Agent 可生成实验报告摘要
 6. 当前支持结构化 RAG + Tool Calling（Mock Agent），不依赖外部 API Key
-7. 后续可升级 LangChain4j / Spring AI / DeepSeek
+7. 后续可升级 LangChain4j / Spring AI / Kimi(Moonshot) / DeepSeek
 8. 新增会话持久化（MySQL），支持多轮对话和历史查询
 
 ### 页面结构
@@ -246,14 +246,32 @@ Mock Agent 基于真实后端接口结果生成回答，不编造数据：
 
 ### 接入 LLM（可选）
 
-环境变量：
-```
-DEEPSEEK_API_KEY
-DEEPSEEK_BASE_URL
-DEEPSEEK_MODEL
+当前 v2.0 默认使用 Mock Agent；只有配置兼容 OpenAI Chat Completions 的 API Key 后，才会调用真实 LLM。工具调用仍由后端完成，LLM 只基于工具结果组织自然语言回答。
+
+通用环境变量：
+```powershell
+$env:AGENT_PROVIDER="kimi"
+$env:AGENT_BASE_URL="https://api.moonshot.cn"
+$env:AGENT_MODEL="moonshot-v1-8k"
+$env:AGENT_API_KEY="你的 Kimi API Key"
 ```
 
-application.yml 已预留 agent 配置段。没有 API Key 时自动使用 Mock Agent，系统正常运行。
+Kimi / Moonshot 也支持以下别名环境变量：
+```powershell
+$env:KIMI_API_KEY="你的 Kimi API Key"
+$env:KIMI_BASE_URL="https://api.moonshot.cn"
+$env:KIMI_MODEL="moonshot-v1-8k"
+```
+
+DeepSeek 示例：
+```
+$env:AGENT_PROVIDER="deepseek"
+$env:AGENT_BASE_URL="https://api.deepseek.com"
+$env:AGENT_MODEL="deepseek-chat"
+$env:AGENT_API_KEY="你的 DeepSeek API Key"
+```
+
+不要把真实 API Key 写入 `application.yml`、`application-local.yml` 或 Git 仓库。没有 API Key 时自动使用 Mock Agent，系统正常运行。
 
 ## API 总览
 
@@ -372,6 +390,6 @@ SELECT * FROM anomaly_record ORDER BY id DESC LIMIT 10;
 - [x] Agent v2.0 结构化 RAG + Tool Calling
 - [x] 7 种 Agent 工具、会话持久化、多轮对话
 - [ ] 接入 MQTT 数据通道
-- [ ] 接入 LangChain4j / Spring AI / DeepSeek LLM
+- [ ] 接入 LangChain4j / Spring AI，并可选择 Kimi(Moonshot) / DeepSeek 等兼容 Chat Completions 的 LLM
 - [ ] 根据真实设备采样频率调优预测与异常检测阈值
 - [ ] 添加向量数据库（Chroma / Milvus）升级为语义 RAG

@@ -48,7 +48,7 @@ public class AgentToolService {
         if (containsAny(msg, "分析", "趋势", "统计", "平均", "最大", "最小", "标准差", "变化率", "波动", "温度变化", "整体趋势")) {
             tools.add("getAnalyticsSummary");
         }
-        if (containsAny(msg, "预测", "forecast", "未来", "5分钟", "10分钟", "趋势估计", "温度会", "下一步")) {
+        if (containsAny(msg, "预测", "forecast", "未来", "5分钟", "10分钟", "趋势估计", "温度会", "下一步", "温度趋势", "当前温度趋势")) {
             tools.add("getTemperatureForecast");
         }
         if (containsAny(msg, "异常", "报警", "风险", "anomaly", "为什么", "原因", "不安全", "警告")) {

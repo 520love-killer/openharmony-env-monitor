@@ -115,8 +115,8 @@ h1,h2,h3,p { margin: 0; }
   margin-bottom: 24px;
 }
 
-.agent-avatar { flex-shrink: 0; width: 100px; }
-.thermometer-svg { width: 100%; height: auto; }
+.agent-avatar { flex-shrink: 0; width: 112px; }
+.agent-avatar img { display: block; width: 100%; height: auto; }
 
 .agent-info h1 { font-size: 22px; margin-bottom: 8px; }
 .agent-info > p { color: var(--muted); line-height: 1.6; margin-bottom: 12px; }

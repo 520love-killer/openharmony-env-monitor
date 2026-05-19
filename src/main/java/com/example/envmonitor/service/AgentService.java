@@ -24,19 +24,22 @@ public class AgentService {
     private final AgentRagService agentRagService;
     private final AgentMemoryService agentMemoryService;
     private final SensorDataService sensorDataService;
+    private final LlmService llmService;
 
     public AgentService(
         AgentToolService agentToolService,
         AgentPromptService agentPromptService,
         AgentRagService agentRagService,
         AgentMemoryService agentMemoryService,
-        SensorDataService sensorDataService
+        SensorDataService sensorDataService,
+        LlmService llmService
     ) {
         this.agentToolService = agentToolService;
         this.agentPromptService = agentPromptService;
         this.agentRagService = agentRagService;
         this.agentMemoryService = agentMemoryService;
         this.sensorDataService = sensorDataService;
+        this.llmService = llmService;
     }
 
     public AgentChatResponse chat(AgentChatRequest request) {
@@ -56,7 +59,8 @@ public class AgentService {
         String confidence = calculateConfidence(toolResults, isReal, isMock);
 
         boolean hasRealData = checkRealDataAvailability(source);
-        String answer = buildAnswer(request.message(), toolResults, source, isReal, hasRealData, isMock);
+        String structuredAnswer = buildAnswer(request.message(), toolResults, source, isReal, hasRealData, isMock);
+        String answer = maybeUseLlm(request.message(), toolResults, structuredAnswer, source, isReal, hasRealData, isMock);
 
         agentMemoryService.saveMessage(sessionId, "agent", answer, toolNames, source, confidence);
 
@@ -69,6 +73,41 @@ public class AgentService {
             confidence,
             LocalDateTime.now().format(DT_FMT)
         );
+    }
+
+    private String maybeUseLlm(String message, List<AgentToolResult> results, String structuredAnswer,
+                               String source, boolean isReal, boolean hasEnoughData, boolean isMock) {
+        if (!llmService.isAvailable()) {
+            return structuredAnswer;
+        }
+
+        List<Map<String, String>> messages = new ArrayList<>();
+        messages.add(Map.of(
+            "role", "system",
+            "content", agentPromptService.buildSystemPrompt(source, isReal, hasEnoughData, false)
+        ));
+        messages.add(Map.of(
+            "role", "user",
+            "content", "用户问题：" + message + "\n\n工具调用结果：\n" + summarizeToolResults(results)
+                + "\n\n请基于以上真实工具结果回答，不要编造不存在的数据。"
+        ));
+        LlmService.LlmChatResponse llm = llmService.chat(messages);
+        if (llm.success()) {
+            return llm.content() + "\n\n---\n数据来源：" + source
+                + " | 使用模型：" + llm.model()
+                + " | 工具调用：" + String.join(", ", results.stream().map(AgentToolResult::toolName).toList());
+        }
+        return structuredAnswer + "\n\n---\n" + llm.content();
+    }
+
+    private String summarizeToolResults(List<AgentToolResult> results) {
+        StringBuilder sb = new StringBuilder();
+        for (AgentToolResult result : results) {
+            sb.append("- ").append(result.toolName())
+                .append(": success=").append(result.success())
+                .append(", summary=").append(result.summary()).append("\n");
+        }
+        return sb.toString();
     }
 
     private String buildAnswer(String message, List<AgentToolResult> results, String source,
@@ -227,6 +266,15 @@ public class AgentService {
         for (AgentToolResult r : results) {
             if ("getRecent50Data".equals(r.toolName()) && r.data() instanceof List<?> list) {
                 return list.size();
+            }
+            if (r.data() instanceof com.example.envmonitor.dto.StatisticsSummaryResponse summary) {
+                return summary.sampleCount();
+            }
+            if (r.data() instanceof com.example.envmonitor.dto.ForecastResponse forecast) {
+                return forecast.sampleCount();
+            }
+            if (r.data() instanceof com.example.envmonitor.dto.AnomalyResponse anomaly) {
+                return anomaly.sampleCount();
             }
         }
         return 0;
