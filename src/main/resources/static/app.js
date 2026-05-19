@@ -1,6 +1,10 @@
 const DEFAULT_SOURCE = 'REAL_SERIAL';
 const AGENT_NAME = '温度计';
 const WAITING_TEXT = '等待 Hi3861 真实设备数据。';
+const SESSIONS_KEY = 'hdt-study-agent-sessions';
+const MAX_HISTORY_MSGS = 10;    // 只传最近 10 条消息给后端
+const MAX_MSG_LENGTH = 1000;    // 单条消息超过 1000 字截断
+const MAX_SESSIONS = 20;        // 最多保留 20 个会话
 
 const SOURCE_LABELS = {
   REAL_SERIAL: '真实串口数据（REAL_SERIAL）',
@@ -18,6 +22,8 @@ const api = {
   forecast: s => `/api/forecast/temperature?limit=50&source=${encodeURIComponent(s)}`,
   anomaly: s => `/api/anomaly/detect?limit=50&source=${encodeURIComponent(s)}`,
   agentChat: '/api/agent/chat',
+  agentStream: '/api/agent/stream',
+  agentStatus: '/api/agent/status',
   agentContext: s => `/api/agent/context?source=${encodeURIComponent(s)}`,
   agentSessions: '/api/agent/sessions',
   agentSession: id => `/api/agent/sessions/${encodeURIComponent(id)}`,
@@ -30,9 +36,80 @@ const api = {
 
 let currentSource = DEFAULT_SOURCE;
 let currentPage = 'agent';
-let currentSessionId = null;
 let charts = {};
-let chatHistory = [];
+
+// ====== Session Management (localStorage) ======
+let currentSession = null;
+
+function loadSessions() {
+  try {
+    const raw = localStorage.getItem(SESSIONS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) { return []; }
+}
+
+function saveSessions(sessions) {
+  try {
+    // 最多保留 MAX_SESSIONS 个会话
+    if (sessions.length > MAX_SESSIONS) {
+      sessions = sessions.slice(0, MAX_SESSIONS);
+    }
+    localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
+  } catch (e) { /* quota exceeded, ignore */ }
+}
+
+function createSession(firstMessage) {
+  const id = 'session-' + Date.now();
+  const title = firstMessage
+    ? (firstMessage.length > 50 ? firstMessage.substring(0, 50) + '...' : firstMessage)
+    : '新会话';
+  const session = {
+    id: id,
+    title: title,
+    role: '环境监测助手',
+    messages: [],
+    createdAt: formatTime(new Date()),
+    updatedAt: formatTime(new Date()),
+  };
+  const sessions = loadSessions();
+  sessions.unshift(session);
+  saveSessions(sessions);
+  currentSession = session;
+  return session;
+}
+
+function saveCurrentSession() {
+  if (!currentSession) return;
+  currentSession.updatedAt = formatTime(new Date());
+  const sessions = loadSessions();
+  const idx = sessions.findIndex(s => s.id === currentSession.id);
+  if (idx >= 0) {
+    sessions[idx] = currentSession;
+  } else {
+    sessions.unshift(currentSession);
+  }
+  saveSessions(sessions);
+}
+
+function deleteSessionFromStorage(sessionId) {
+  const sessions = loadSessions().filter(s => s.id !== sessionId);
+  saveSessions(sessions);
+  if (currentSession && currentSession.id === sessionId) {
+    currentSession = null;
+  }
+}
+
+function getSessionHistory(session) {
+  if (!session || !session.messages) return [];
+  const recent = session.messages.slice(-MAX_HISTORY_MSGS);
+  // 截断长消息
+  return recent.map(msg => ({
+    role: msg.role,
+    content: msg.content && msg.content.length > MAX_MSG_LENGTH
+      ? msg.content.substring(0, MAX_MSG_LENGTH) + '...'
+      : msg.content,
+  }));
+}
 
 // ====== Page Navigation ======
 document.querySelectorAll('.nav-item').forEach(item => {
@@ -55,7 +132,7 @@ function switchPage(page) {
 
 async function refreshCurrentPage() {
   switch (currentPage) {
-    case 'agent': refreshAgentContext(); break;
+    case 'agent': refreshAgentPage(); break;
     case 'dashboard': await refreshDashboard(); break;
     case 'statistics': await refreshStatistics(); break;
     case 'forecast': await refreshForecast(); break;
@@ -66,123 +143,433 @@ async function refreshCurrentPage() {
   }
 }
 
-// ====== Agent Page ======
-document.getElementById('chatSendBtn').addEventListener('click', sendChat);
-document.getElementById('chatInput').addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
-});
-document.getElementById('chatClearBtn').addEventListener('click', clearChat);
+// ====== Agent Page - v2.0 ======
+let isStreaming = false;
 
-document.querySelectorAll('.quick-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.getElementById('chatInput').value = btn.dataset.question;
-    sendChat();
-  });
-});
+// Init agent page
+function refreshAgentPage() {
+  checkAgentStatus();
+  loadRealtimeOverview();
+  // Restore last session
+  if (!currentSession) {
+    const sessions = loadSessions();
+    if (sessions.length > 0) {
+      currentSession = sessions[0];
+      restoreChatFromSession(currentSession);
+    }
+  }
+}
 
-async function sendChat() {
-  const input = document.getElementById('chatInput');
-  const message = input.value.trim();
-  if (!message) return;
-  input.value = '';
-
-  addChatMessage('user', message);
-  addChatMessage('agent', '温度计 正在分析...', true);
-
+// Check agent mode (DeepSeek vs Mock)
+async function checkAgentStatus() {
   try {
-    const resp = await fetch(api.agentChat, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId: currentSessionId, message, source: currentSource }),
-    });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const resp = await fetch(api.agentStatus);
     const data = await resp.json();
+    const modeEl = document.getElementById('agentTopMode');
+    const statusEl = document.getElementById('agentTopStatus');
+    const modelEl = document.getElementById('heroModel');
 
-    removeTypingIndicator();
-    currentSessionId = data.sessionId;
-    addChatMessage('agent', data.answer, false, data.usedTools, data.dataSource, data.confidence);
-    updateAgentStatus(data.dataSource);
-    updateSidebarStatus(data.dataSource, data.confidence);
-  } catch (err) {
-    removeTypingIndicator();
-    addChatMessage('agent', `请求失败：${err.message}`, false, [], '', '');
+    if (data.mode === 'deepseek') {
+      modeEl.textContent = 'DeepSeek 模式';
+      modeEl.className = 'topbar-badge';
+      modeEl.style.background = 'var(--green-soft)';
+      modeEl.style.color = 'var(--green)';
+      statusEl.innerHTML = '<span class="status-dot online"></span> 在线 · DeepSeek';
+    } else {
+      modeEl.textContent = 'Mock 模式';
+      modeEl.className = 'topbar-badge';
+      modeEl.style.background = 'var(--amber-soft)';
+      modeEl.style.color = 'var(--amber)';
+      statusEl.innerHTML = '<span class="status-dot warning"></span> Mock 模式';
+    }
+    if (modelEl && data.model) modelEl.textContent = data.model;
+
+    document.getElementById('heroDataSource').textContent = currentSource;
+
+    updateSidebarStatusFromAgent(data);
+  } catch (e) {
+    const modeEl = document.getElementById('agentTopMode');
+    modeEl.textContent = '离线';
   }
 }
 
-function addChatMessage(role, content, isTyping, tools, source, confidence) {
+function updateSidebarStatusFromAgent(data) {
+  const el = document.getElementById('sidebarStatus');
+  if (!el) return;
+  el.innerHTML = `Agent: ${data.mode === 'deepseek' ? '🟢 DeepSeek' : '🟡 Mock'} | 模型: ${data.model || '-'}`;
+}
+
+// Load realtime overview data
+async function loadRealtimeOverview() {
+  try {
+    const resp = await fetch(api.latest(currentSource));
+    const payload = await resp.json();
+    const data = payload?.data;
+    const hasData = payload?.hasData === true && data;
+
+    if (hasData) {
+      document.getElementById('rtTemperature').textContent = fmtNum(data.temperature, 2) + ' ℃';
+      document.getElementById('rtHumidity').textContent = fmtNum(data.humidity, 1) + ' %';
+      document.getElementById('rtGas').textContent = fmtNum(data.gas, 1) + ' ppm';
+      document.getElementById('rtStatus').textContent = data.status || '-';
+      document.getElementById('rtStatus').className = 'realtime-value ' +
+        (data.status === 'WARNING' ? 'warning-text' : 'safe-text');
+      document.getElementById('realtimeFooter').textContent =
+        `数据来源：${data.dataSource || currentSource}（Hi3861）`;
+    } else {
+      document.getElementById('rtTemperature').textContent = '-- ℃';
+      document.getElementById('rtHumidity').textContent = '-- %';
+      document.getElementById('rtGas').textContent = '-- ppm';
+      document.getElementById('rtStatus').textContent = '等待数据';
+      document.getElementById('rtStatus').className = 'realtime-value';
+      document.getElementById('realtimeFooter').textContent = '等待真实设备数据...';
+    }
+    document.getElementById('heroDataSource').textContent = hasData ? (data.dataSource || currentSource) : currentSource;
+  } catch (e) { /* ignore */ }
+}
+
+// Restore chat messages from saved session
+function restoreChatFromSession(session) {
   const container = document.getElementById('chatMessages');
-  const div = document.createElement('div');
-  div.className = `chat-message chat-${role}${isTyping ? ' typing' : ''}`;
-  let html = `<div class="chat-bubble">${escapeHtml(content).replace(/\n/g, '<br>')}</div>`;
-  if (tools && tools.length) {
-    html += `<div class="chat-tools">${tools.map(t => `<span>${escapeHtml(t)}</span>`).join('')}</div>`;
+  // Remove welcome message
+  const welcome = document.getElementById('chatWelcome');
+  if (welcome) welcome.remove();
+
+  // Clear existing messages
+  container.querySelectorAll('.chat-message').forEach(m => m.remove());
+
+  if (session.messages && session.messages.length > 0) {
+    session.messages.forEach(msg => {
+      if (msg.role === 'user') {
+        addChatBubble('user', msg.content, msg.createdAt);
+      } else if (msg.role === 'assistant') {
+        addChatBubble('agent', msg.content, msg.createdAt,
+          msg.usedTools, msg.dataSource, msg.confidence);
+      }
+    });
+  } else {
+    // Show welcome if no messages
+    showWelcome();
   }
-  if (source && role === 'agent') {
-    html += `<div class="chat-meta">数据来源：${escapeHtml(source)}${confidence ? ' | 置信度：' + escapeHtml(confidence) : ''}</div>`;
-  }
-  div.innerHTML = html;
-  container.appendChild(div);
-  container.scrollTop = container.scrollHeight;
-  chatHistory.push({ role, content });
 }
 
-function removeTypingIndicator() {
-  const typing = document.querySelector('.chat-message.typing');
-  if (typing) typing.remove();
-}
-
-function clearChat() {
-  currentSessionId = null;
-  chatHistory = [];
-  document.getElementById('chatMessages').innerHTML = `
-    <div class="chat-welcome">
+function showWelcome() {
+  const container = document.getElementById('chatMessages');
+  container.innerHTML = `
+    <div class="chat-welcome" id="chatWelcome">
       <p>👋 你好！我是 <strong>温度计</strong>，你的环境监测智能助手。</p>
-      <p>请选择一个快捷问题，或直接输入你的问题。</p>
-      <p class="chat-note">会话已清空。</p>
+      <p>你可以直接提问，或使用右侧工具与快捷提问获取更精准的分析。</p>
+      <p class="chat-note">当前优先使用 <strong>REAL_SERIAL</strong> 数据。如果只有 MOCK 数据，我会明确说明。</p>
     </div>`;
 }
 
-function updateAgentStatus(source) {
-  const dot = document.getElementById('agentOnlineStatus');
-  const text = document.getElementById('agentStatusText');
-  const mode = document.getElementById('agentMode');
-  if (source === 'MOCK') {
-    dot.className = 'status-dot warning';
-    text.textContent = '模拟数据模式';
-    mode.textContent = 'Mock Agent';
-  } else if (source === 'REAL_SERIAL' || source === 'REAL_MQTT') {
-    dot.className = 'status-dot online';
-    text.textContent = '在线';
-    mode.textContent = 'Mock Agent (结构化 RAG)';
-  } else {
-    dot.className = 'status-dot offline';
-    text.textContent = '等待数据';
-    mode.textContent = 'Mock Agent';
-  }
-}
+// ====== Chat Send (Streaming) ======
+document.getElementById('chatSendBtn').addEventListener('click', sendChatStream);
+document.getElementById('chatInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatStream(); }
+});
 
-function updateSidebarStatus(source, confidence) {
-  const el = document.getElementById('sidebarStatus');
-  if (source === 'MOCK') {
-    el.innerHTML = '📡 模拟数据 | ' + (confidence || 'LOW');
-  } else if (source === 'REAL_SERIAL') {
-    el.innerHTML = '🟢 串口数据 | ' + (confidence || '...');
-  } else if (source === 'REAL_MQTT') {
-    el.innerHTML = '🟢 MQTT 数据 | ' + (confidence || '...');
-  } else {
-    el.textContent = '等待数据...';
-  }
-}
+// Remove old clear button listener since we use inline onclick
+// Attach tool panel click handlers
+document.querySelectorAll('.tool-item').forEach(item => {
+  item.addEventListener('click', () => {
+    const question = item.dataset.question;
+    document.getElementById('chatInput').value = question;
+    sendChatStream();
+  });
+});
 
-async function refreshAgentContext() {
+// Attach quick prompt click handlers
+document.querySelectorAll('.quick-prompt-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.getElementById('chatInput').value = btn.dataset.question;
+    sendChatStream();
+  });
+});
+
+async function sendChatStream() {
+  if (isStreaming) return;
+
+  const input = document.getElementById('chatInput');
+  const message = input.value.trim();
+  if (!message) return;
+
+  input.value = '';
+  isStreaming = true;
+  const sendBtn = document.getElementById('chatSendBtn');
+  sendBtn.disabled = true;
+  sendBtn.textContent = '...';
+
+  // Hide welcome if present
+  const welcome = document.getElementById('chatWelcome');
+  if (welcome) welcome.remove();
+
+  // Ensure session exists
+  if (!currentSession) {
+    currentSession = createSession(message);
+  }
+
+  // Add user message to UI and session
+  const userTime = formatTime(new Date());
+  addChatBubble('user', message, userTime);
+  currentSession.messages.push({
+    role: 'user',
+    content: message,
+    createdAt: userTime,
+  });
+  saveCurrentSession();
+
+  // Add agent streaming bubble
+  const agentTime = formatTime(new Date());
+  const agentMsgEl = addChatBubble('agent', '', agentTime, [], '', '');
+  const bubbleEl = agentMsgEl.querySelector('.chat-bubble');
+  bubbleEl.classList.add('streaming');
+  const indicator = document.createElement('div');
+  indicator.className = 'chat-stream-indicator';
+  indicator.textContent = '正在分析...';
+  bubbleEl.parentElement.insertBefore(indicator, bubbleEl.nextSibling);
+
+  let fullContent = '';
+
   try {
-    const ctx = await getJson(api.agentContext(currentSource), {});
-    if (ctx.hasEnoughRealData === false && currentSource !== 'MOCK') {
-      document.getElementById('dataSourceNotice').innerHTML =
-        '<p style="color:#b7791f">真实数据不足 5 条。请确认 Hi3861 串口已连接，或切换到模拟数据。</p>';
+    const history = getSessionHistory(currentSession);
+    const resp = await fetch(api.agentStream, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: currentSession.id,
+        role: '环境监测助手',
+        message: message,
+        source: currentSource,
+        history: history,
+      }),
+    });
+
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      // Parse SSE events
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || ''; // keep incomplete line in buffer
+
+      for (const line of lines) {
+        if (line.startsWith('event:')) {
+          var currentEvent = line.substring(6).trim();
+        } else if (line.startsWith('data:')) {
+          const data = line.substring(5).trim();
+          handleStreamEvent(currentEvent || 'chunk', data, bubbleEl, indicator,
+            s => { fullContent = s; }, agentMsgEl, agentTime);
+          currentEvent = null;
+        }
+      }
     }
-    updateAgentStatus(currentSource);
-  } catch (e) { /* ignore */ }
+
+    // Process remaining buffer
+    if (buffer.trim()) {
+      const lines2 = buffer.split('\n');
+      for (const line of lines2) {
+        if (line.startsWith('data:')) {
+          const data = line.substring(5).trim();
+          handleStreamEvent('chunk', data, bubbleEl, indicator,
+            s => { fullContent = s; }, agentMsgEl, agentTime);
+        }
+      }
+    }
+  } catch (err) {
+    bubbleEl.textContent = fullContent || `请求失败：${err.message}`;
+    bubbleEl.classList.remove('streaming');
+    if (indicator) indicator.remove();
+  }
+
+  isStreaming = false;
+  sendBtn.disabled = false;
+  sendBtn.textContent = '➤ 发送';
+
+  // Refresh realtime overview
+  loadRealtimeOverview();
+}
+
+let streamDoneData = null;
+
+function handleStreamEvent(event, data, bubbleEl, indicator, setContent, agentMsgEl, agentTime) {
+  switch (event) {
+    case 'status':
+      if (indicator) indicator.textContent = data || '分析中...';
+      break;
+    case 'chunk':
+      if (indicator) { indicator.remove(); indicator = null; }
+      bubbleEl.textContent += data;
+      // Simple markdown rendering for bold
+      renderMarkdownInline(bubbleEl);
+      scrollChatBottom();
+      break;
+    case 'done':
+      if (indicator) indicator.remove();
+      bubbleEl.classList.remove('streaming');
+      try {
+        const doneData = typeof data === 'string' ? JSON.parse(data) : data;
+        streamDoneData = doneData;
+        updateAgentMeta(agentMsgEl, doneData.usedTools, doneData.dataSource, doneData.confidence);
+        // Save to session
+        if (currentSession) {
+          currentSession.messages.push({
+            role: 'assistant',
+            content: bubbleEl.textContent,
+            createdAt: agentTime,
+            usedTools: doneData.usedTools || [],
+            dataSource: doneData.dataSource || '',
+            confidence: doneData.confidence || '',
+          });
+          // Update session title from first message
+          if (currentSession.messages.length <= 2) {
+            const firstMsg = currentSession.messages[0]?.content || '';
+            currentSession.title = firstMsg.length > 50 ? firstMsg.substring(0, 50) + '...' : firstMsg;
+          }
+          saveCurrentSession();
+        }
+      } catch (e) { /* ignore */ }
+      break;
+    case 'error':
+      if (indicator) indicator.remove();
+      bubbleEl.classList.remove('streaming');
+      if (!bubbleEl.textContent.trim()) {
+        bubbleEl.textContent = '请求失败：' + (data || '未知错误');
+      }
+      break;
+  }
+}
+
+// Update agent message meta (tools, source, confidence)
+function updateAgentMeta(msgEl, tools, source, confidence) {
+  // Remove old meta
+  msgEl.querySelector('.chat-tools')?.remove();
+  msgEl.querySelector('.chat-meta')?.remove();
+
+  if (tools && tools.length > 0) {
+    const toolsDiv = document.createElement('div');
+    toolsDiv.className = 'chat-tools';
+    toolsDiv.innerHTML = tools.map(t => `<span>${escHtml(t)}</span>`).join('');
+    msgEl.appendChild(toolsDiv);
+  }
+
+  if (source) {
+    const metaDiv = document.createElement('div');
+    metaDiv.className = 'chat-meta';
+    metaDiv.textContent = `数据来源：${source}${confidence ? ' | 置信度：' + confidence : ''}`;
+    msgEl.appendChild(metaDiv);
+  }
+}
+
+// Simple inline markdown renderer for bold/italic/code
+function renderMarkdownInline(el) {
+  // Save cursor position
+  const text = el.textContent;
+  let html = text
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/### (.+)/g, '<h3>$1</h3>')
+    .replace(/## (.+)/g, '<h2>$1</h2>')
+    .replace(/# (.+)/g, '<h1>$1</h1>')
+    .replace(/\n/g, '<br>')
+    .replace(/---/g, '<hr>');
+  el.innerHTML = html;
+}
+
+function scrollChatBottom() {
+  const container = document.getElementById('chatMessages');
+  container.scrollTop = container.scrollHeight;
+}
+
+// Add chat bubble and return the element
+function addChatBubble(role, content, time, tools, source, confidence) {
+  const container = document.getElementById('chatMessages');
+  const div = document.createElement('div');
+  div.className = `chat-message chat-${role}`;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'chat-bubble-wrap';
+
+  if (role === 'agent') {
+    const avatar = document.createElement('div');
+    avatar.className = 'chat-avatar chat-avatar-agent';
+    avatar.textContent = '🌡';
+    wrap.appendChild(avatar);
+  }
+
+  const bubble = document.createElement('div');
+  bubble.className = 'chat-bubble';
+  bubble.innerHTML = renderContent(content);
+  wrap.appendChild(bubble);
+
+  if (role === 'user') {
+    const avatar = document.createElement('div');
+    avatar.className = 'chat-avatar';
+    avatar.textContent = '👤';
+    wrap.appendChild(avatar);
+  }
+
+  div.appendChild(wrap);
+
+  if (time) {
+    const timeDiv = document.createElement('div');
+    timeDiv.className = 'chat-time';
+    timeDiv.textContent = time;
+    div.appendChild(timeDiv);
+  }
+
+  if (tools && tools.length > 0) {
+    const toolsDiv = document.createElement('div');
+    toolsDiv.className = 'chat-tools';
+    toolsDiv.innerHTML = tools.map(t => `<span>${escHtml(t)}</span>`).join('');
+    div.appendChild(toolsDiv);
+  }
+
+  if (source && role === 'agent') {
+    const metaDiv = document.createElement('div');
+    metaDiv.className = 'chat-meta';
+    metaDiv.textContent = `数据来源：${source}${confidence ? ' | 置信度：' + confidence : ''}`;
+    div.appendChild(metaDiv);
+  }
+
+  container.appendChild(div);
+  scrollChatBottom();
+  return div;
+}
+
+function renderContent(content) {
+  if (!content) return '';
+  return escHtml(content)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/### (.+)/g, '<h3>$1</h3>')
+    .replace(/## (.+)/g, '<h2>$1</h2>')
+    .replace(/# (.+)/g, '<h1>$1</h1>')
+    .replace(/\n/g, '<br>')
+    .replace(/-{3,}/g, '<hr>')
+    .replace(/\|(.+)\|/g, (match) => {
+      // Simple table - don't convert inside pre/code
+      return match;
+    });
+}
+
+// ====== Chat Clear ======
+function clearChat() {
+  if (currentSession) {
+    deleteSessionFromStorage(currentSession.id);
+  }
+  currentSession = null;
+  streamDoneData = null;
+  showWelcome();
 }
 
 // ====== Dashboard Page ======
@@ -399,6 +786,7 @@ async function getJson(url, fallback) {
 
 function sourceLabel(s) { return SOURCE_LABELS[s] || s || '无数据'; }
 function esc(v) { return String(v ?? '-').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function escHtml(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 function fmt(v, d, u) {
   if (v === null || v === undefined || v === '') return '-';
   if (typeof v === 'string' && v.match(/^\d{4}-\d{2}-\d{2}/)) return new Date(v).toLocaleString();
@@ -406,8 +794,38 @@ function fmt(v, d, u) {
   if (!Number.isFinite(n)) return esc(String(v));
   return `${n.toFixed(d ?? 1)}${u ? ' ' + u : ''}`;
 }
+function fmtNum(v, d) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return '--';
+  return n.toFixed(d ?? 1);
+}
 function num(v) { const n = Number(v); return Number.isFinite(n) ? n : null; }
-function escapeHtml(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function formatTime(date) {
+  const d = date || new Date();
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+// ====== Agent Context Refresh ======
+async function refreshAgentContext() {
+  try {
+    const ctx = await getJson(api.agentContext(currentSource), {});
+    if (ctx.hasEnoughRealData === false && currentSource !== 'MOCK') {
+      // Show warning in sidebar
+      document.getElementById('sidebarStatus').innerHTML =
+        '⚠ 真实数据不足 5 条';
+    }
+  } catch (e) { /* ignore */ }
+}
 
 // ====== Init ======
 refreshAgentContext();
+checkAgentStatus();
+loadRealtimeOverview();
+
+// Auto-refresh realtime data every 5 seconds
+setInterval(() => {
+  if (currentPage === 'agent') {
+    loadRealtimeOverview();
+  }
+}, 5000);

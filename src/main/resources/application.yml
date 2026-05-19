@@ -43,7 +43,12 @@ app:
 
 agent:
   mode: ${AGENT_MODE:mock}
-  provider: ${AGENT_PROVIDER:mock}
-  model: ${AGENT_MODEL:}
+  provider: ${AGENT_PROVIDER:deepseek}
+  model: ${AGENT_MODEL:deepseek-chat}
   api-key: ${AGENT_API_KEY:}
-  base-url: ${AGENT_BASE_URL:}
+  base-url: ${AGENT_BASE_URL:https://api.deepseek.com}
+
+# DeepSeek API 配置（通过环境变量注入，不写死在代码中）
+# DEEPSEEK_API_KEY   - API 密钥（不要在代码/日志中打印）
+# DEEPSEEK_BASE_URL  - API 地址，默认 https://api.deepseek.com
+# DEEPSEEK_MODEL     - 模型名称，默认 deepseek-chat

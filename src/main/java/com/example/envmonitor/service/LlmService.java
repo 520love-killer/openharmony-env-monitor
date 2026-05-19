@@ -1,6 +1,8 @@
 package com.example.envmonitor.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -10,6 +12,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -136,6 +139,85 @@ public class LlmService {
             log.error("LLM API call failed", e);
             return new LlmChatResponse(false,
                 "LLM API 调用异常：" + e.getMessage() + "，已降级为 Mock Agent 回答。", model);
+        }
+    }
+
+    /**
+     * Stream chat via DeepSeek API with SSE. Calls onChunk for each content delta.
+     * Returns false if streaming not available, falls back to mock.
+     */
+    public boolean streamChat(List<Map<String, String>> messages, Consumer<String> onChunk, Consumer<String> onError) {
+        if (!isAvailable()) {
+            onError.accept("API Key 未配置");
+            return false;
+        }
+
+        try {
+            List<Map<String, Object>> apiMessages = new ArrayList<>();
+            for (var msg : messages) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("role", msg.get("role"));
+                m.put("content", msg.get("content"));
+                apiMessages.add(m);
+            }
+
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("model", model);
+            body.put("messages", apiMessages);
+            body.put("temperature", 0.7);
+            body.put("max_tokens", 2000);
+            body.put("stream", true);
+
+            String json = objectMapper.writeValueAsString(body);
+            String url = baseUrl.replaceAll("/$", "") + "/v1/chat/completions";
+
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + apiKey)
+                .timeout(Duration.ofSeconds(120))
+                .POST(HttpRequest.BodyPublishers.ofString(json))
+                .build();
+
+            HttpResponse<java.io.InputStream> response = httpClient.send(request,
+                HttpResponse.BodyHandlers.ofInputStream());
+
+            if (response.statusCode() != 200) {
+                onError.accept("LLM API HTTP " + response.statusCode());
+                return false;
+            }
+
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(response.body()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (line.startsWith("data: ")) {
+                        String data = line.substring(6).trim();
+                        if ("[DONE]".equals(data)) {
+                            break;
+                        }
+                        try {
+                            Map<String, Object> chunk = objectMapper.readValue(data, Map.class);
+                            List<Map<String, Object>> choices = (List<Map<String, Object>>) chunk.get("choices");
+                            if (choices != null && !choices.isEmpty()) {
+                                Map<String, Object> delta = (Map<String, Object>) choices.get(0).get("delta");
+                                if (delta != null) {
+                                    String content = (String) delta.get("content");
+                                    if (content != null && !content.isEmpty()) {
+                                        onChunk.accept(content);
+                                    }
+                                }
+                            }
+                        } catch (Exception e) {
+                            // skip unparseable chunks
+                        }
+                    }
+                }
+            }
+            return true;
+        } catch (Exception e) {
+            log.error("LLM stream failed", e);
+            onError.accept(e.getMessage());
+            return false;
         }
     }
 

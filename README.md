@@ -246,32 +246,60 @@ Mock Agent 基于真实后端接口结果生成回答，不编造数据：
 
 ### 接入 LLM（可选）
 
-当前 v2.0 默认使用 Mock Agent；只有配置兼容 OpenAI Chat Completions 的 API Key 后，才会调用真实 LLM。工具调用仍由后端完成，LLM 只基于工具结果组织自然语言回答。
+当前 v2.0 支持两种模式：
+1. **Mock Agent**（默认）：基于后端工具调用结果生成结构化回答，不依赖外部 API
+2. **DeepSeek 流式模式**：配置 DEEPSEEK_API_KEY 后自动启用流式输出，支持多轮对话上下文记忆
 
-通用环境变量：
+DeepSeek 环境变量：
 ```powershell
-$env:AGENT_PROVIDER="kimi"
-$env:AGENT_BASE_URL="https://api.moonshot.cn"
-$env:AGENT_MODEL="moonshot-v1-8k"
-$env:AGENT_API_KEY="你的 Kimi API Key"
+$env:DEEPSEEK_API_KEY="你的 DeepSeek API Key"
+$env:DEEPSEEK_BASE_URL="https://api.deepseek.com"
+$env:DEEPSEEK_MODEL="deepseek-chat"
 ```
 
-Kimi / Moonshot 也支持以下别名环境变量：
+通用环境变量（兼容旧配置）：
+```powershell
+$env:AGENT_PROVIDER="deepseek"
+$env:AGENT_BASE_URL="https://api.deepseek.com"
+$env:AGENT_MODEL="deepseek-chat"
+$env:AGENT_API_KEY="你的 API Key"
+```
+
+也兼容 Kimi / Moonshot：
 ```powershell
 $env:KIMI_API_KEY="你的 Kimi API Key"
 $env:KIMI_BASE_URL="https://api.moonshot.cn"
 $env:KIMI_MODEL="moonshot-v1-8k"
 ```
 
-DeepSeek 示例：
-```
-$env:AGENT_PROVIDER="deepseek"
-$env:AGENT_BASE_URL="https://api.deepseek.com"
-$env:AGENT_MODEL="deepseek-chat"
-$env:AGENT_API_KEY="你的 DeepSeek API Key"
-```
+**安全注意事项：**
+- API Key 只在服务端读取，不会传到前端
+- 不要把真实 API Key 写入 `application.yml`、`application-local.yml` 或 Git 仓库
+- 不要 `console.log` API Key
+- 没有 API Key 时自动使用 Mock Agent，系统正常运行
+- `.env.local` 和 `application-local.yml` 已加入 `.gitignore`
 
-不要把真实 API Key 写入 `application.yml`、`application-local.yml` 或 Git 仓库。没有 API Key 时自动使用 Mock Agent，系统正常运行。
+### 流式输出
+
+v2.0 新增 `POST /api/agent/stream` 端点，使用 SSE (Server-Sent Events) 实现流式输出：
+- 前端通过 `ReadableStream` 逐字/分段接收 Agent 回答
+- 用户发送问题后立即显示气泡，内容逐步追加
+- 支持"正在分析..."中间状态提示
+- 输出结束后显示 usedTools、dataSource、confidence
+- 发送中禁止重复发送
+- DeepSeek 调用失败时自动降级为 Mock 流式输出
+
+### 上下文记忆与多轮对话
+
+v2.0 支持多轮对话上下文记忆：
+- 会话数据保存在浏览器 `localStorage`（key: `hdt-study-agent-sessions`）
+- 自动保存当前会话，刷新页面后保留
+- 发送新问题时，自动将最近 10 条历史消息传给后端
+- 单条消息超过 1000 字自动截断
+- 历史会话超过 20 个时保留最近 20 个
+- 支持新建会话、清空会话
+- 后端同时持久化到 MySQL（AgentConversation / AgentMessage 表）
+- API Key 不会写入 localStorage
 
 ## API 总览
 
@@ -299,6 +327,8 @@ Agent（v2.0）：
 
 ```text
 POST   /api/agent/chat
+POST   /api/agent/stream            ← 新增：SSE 流式输出
+GET    /api/agent/status            ← 新增：Agent 状态（DeepSeek/Mock）
 GET    /api/agent/context?source=REAL_SERIAL
 GET    /api/agent/sessions
 GET    /api/agent/sessions/{sessionId}
@@ -389,7 +419,10 @@ SELECT * FROM anomaly_record ORDER BY id DESC LIMIT 10;
 - [x] 串口实时读取已接入
 - [x] Agent v2.0 结构化 RAG + Tool Calling
 - [x] 7 种 Agent 工具、会话持久化、多轮对话
+- [x] DeepSeek 流式输出（SSE + ReadableStream）
+- [x] 多轮对话上下文记忆（localStorage + MySQL）
+- [x] Mock 模式伪流式降级
+- [x] 左右两栏 Agent 工作台布局
 - [ ] 接入 MQTT 数据通道
-- [ ] 接入 LangChain4j / Spring AI，并可选择 Kimi(Moonshot) / DeepSeek 等兼容 Chat Completions 的 LLM
 - [ ] 根据真实设备采样频率调优预测与异常检测阈值
 - [ ] 添加向量数据库（Chroma / Milvus）升级为语义 RAG

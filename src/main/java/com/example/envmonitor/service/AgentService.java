@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -50,17 +51,23 @@ public class AgentService {
 
         agentMemoryService.saveMessage(sessionId, "user", request.message(), null, source, null);
 
+        // Build conversation history from request or database
+        List<Map<String, String>> history = request.history();
+        if (history == null || history.isEmpty()) {
+            history = agentMemoryService.getRecentConversation(sessionId, 10);
+        }
+
         List<String> toolNames = agentToolService.selectTools(request.message());
         List<AgentToolResult> toolResults = agentToolService.executeTools(toolNames, source);
 
         boolean isReal = DataSourceUtils.isReal(source);
         boolean isMock = DataSourceUtils.MOCK.equals(source);
-
         String confidence = calculateConfidence(toolResults, isReal, isMock);
-
         boolean hasRealData = checkRealDataAvailability(source);
+
         String structuredAnswer = buildAnswer(request.message(), toolResults, source, isReal, hasRealData, isMock);
-        String answer = maybeUseLlm(request.message(), toolResults, structuredAnswer, source, isReal, hasRealData, isMock);
+        String answer = maybeUseLlmWithHistory(request.message(), toolResults, structuredAnswer,
+            source, isReal, hasRealData, isMock, history);
 
         agentMemoryService.saveMessage(sessionId, "agent", answer, toolNames, source, confidence);
 
@@ -75,8 +82,135 @@ public class AgentService {
         );
     }
 
-    private String maybeUseLlm(String message, List<AgentToolResult> results, String structuredAnswer,
-                               String source, boolean isReal, boolean hasEnoughData, boolean isMock) {
+    /**
+     * Stream agent response. Calls onStart with metadata, onChunk with text deltas,
+     * onDone with final metadata (toolNames, source, confidence).
+     */
+    public void streamChat(AgentChatRequest request,
+                           Consumer<String> onStart,
+                           Consumer<String> onChunk,
+                           Consumer<StreamDone> onDone,
+                           Consumer<String> onError) {
+        String sessionId = agentMemoryService.ensureSession(request.sessionId(), request.message());
+        String source = sensorDataService.normalizeSource(
+            request.source() != null ? request.source() : DataSourceUtils.REAL_SERIAL
+        );
+
+        agentMemoryService.saveMessage(sessionId, "user", request.message(), null, source, null);
+
+        List<Map<String, String>> history = request.history();
+        if (history == null || history.isEmpty()) {
+            history = agentMemoryService.getRecentConversation(sessionId, 10);
+        }
+
+        List<String> toolNames = agentToolService.selectTools(request.message());
+        List<AgentToolResult> toolResults = agentToolService.executeTools(toolNames, source);
+
+        boolean isReal = DataSourceUtils.isReal(source);
+        boolean isMock = DataSourceUtils.MOCK.equals(source);
+        String confidence = calculateConfidence(toolResults, isReal, isMock);
+        boolean hasRealData = checkRealDataAvailability(source);
+
+        // Send initial metadata
+        try {
+            onStart.accept("开始分析...");
+        } catch (Exception e) { /* ignore */ }
+
+        // Build context for LLM
+        String structuredAnswer = buildAnswer(request.message(), toolResults, source, isReal, hasRealData, isMock);
+        List<Map<String, String>> messages = buildLlmMessages(request.message(), toolResults,
+            source, isReal, hasRealData, isMock, history);
+
+        // Try DeepSeek streaming first, fallback to mock streaming
+        if (llmService.isAvailable()) {
+            boolean streamOk = llmService.streamChat(messages,
+                chunk -> {
+                    try { onChunk.accept(chunk); } catch (Exception e) { /* ignore */ }
+                },
+                error -> {
+                    // DeepSeek failed, fallback to mock streaming
+                    log.warn("DeepSeek stream failed, falling back to mock: {}", error);
+                    mockStreamAnswer(structuredAnswer, onChunk);
+                }
+            );
+            if (streamOk) {
+                // Save the full answer (built from chunks) to database
+                // The frontend will assemble it and can save via API
+                StreamDone done = new StreamDone(sessionId, AgentPromptService.AGENT_NAME,
+                    toolNames.stream().toList(), source, confidence,
+                    LocalDateTime.now().format(DT_FMT));
+                try { onDone.accept(done); } catch (Exception e) { /* ignore */ }
+                return;
+            }
+        }
+
+        // Mock streaming fallback
+        mockStreamAnswer(structuredAnswer, onChunk);
+        StreamDone done = new StreamDone(sessionId, AgentPromptService.AGENT_NAME,
+            toolNames.stream().toList(), source, confidence,
+            LocalDateTime.now().format(DT_FMT));
+        try { onDone.accept(done); } catch (Exception e) { /* ignore */ }
+    }
+
+    /**
+     * Simulate streaming by breaking the answer into small chunks with delays.
+     * Called on a separate thread so the SSE connection stays open.
+     */
+    private void mockStreamAnswer(String answer, Consumer<String> onChunk) {
+        if (answer == null || answer.isEmpty()) {
+            onChunk.accept("当前没有足够数据来回答你的问题。");
+            return;
+        }
+
+        // Break into character chunks for realistic streaming feel
+        int chunkSize = 3;
+        for (int i = 0; i < answer.length(); i += chunkSize) {
+            int end = Math.min(i + chunkSize, answer.length());
+            String chunk = answer.substring(i, end);
+            onChunk.accept(chunk);
+            try {
+                Thread.sleep(30); // simulate typing delay
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+    }
+
+    private List<Map<String, String>> buildLlmMessages(String message, List<AgentToolResult> results,
+                                                        String source, boolean isReal, boolean hasEnough, boolean isMock,
+                                                        List<Map<String, String>> history) {
+        List<Map<String, String>> messages = new ArrayList<>();
+        messages.add(Map.of(
+            "role", "system",
+            "content", agentPromptService.buildSystemPrompt(source, isReal, hasEnough, isMock)
+        ));
+
+        // Add conversation history (last 10 messages, each truncated to 1000 chars)
+        if (history != null) {
+            int start = Math.max(0, history.size() - 10);
+            for (int i = start; i < history.size(); i++) {
+                Map<String, String> msg = history.get(i);
+                String content = msg.get("content");
+                // Truncate long messages to 1000 chars
+                if (content != null && content.length() > 1000) {
+                    content = content.substring(0, 1000) + "...";
+                }
+                messages.add(Map.of("role", msg.get("role"), "content", content));
+            }
+        }
+
+        messages.add(Map.of(
+            "role", "user",
+            "content", "用户问题：" + message + "\n\n工具调用结果：\n" + summarizeToolResults(results)
+                + "\n\n请基于以上真实工具结果回答，不要编造不存在的数据。"
+        ));
+        return messages;
+    }
+
+    private String maybeUseLlmWithHistory(String message, List<AgentToolResult> results, String structuredAnswer,
+                                          String source, boolean isReal, boolean hasEnoughData, boolean isMock,
+                                          List<Map<String, String>> history) {
         if (!llmService.isAvailable()) {
             return structuredAnswer;
         }
@@ -86,6 +220,20 @@ public class AgentService {
             "role", "system",
             "content", agentPromptService.buildSystemPrompt(source, isReal, hasEnoughData, false)
         ));
+
+        // Add conversation history
+        if (history != null) {
+            int start = Math.max(0, history.size() - 10);
+            for (int i = start; i < history.size(); i++) {
+                Map<String, String> msg = history.get(i);
+                String content = msg.get("content");
+                if (content != null && content.length() > 1000) {
+                    content = content.substring(0, 1000) + "...";
+                }
+                messages.add(Map.of("role", msg.get("role"), "content", content));
+            }
+        }
+
         messages.add(Map.of(
             "role", "user",
             "content", "用户问题：" + message + "\n\n工具调用结果：\n" + summarizeToolResults(results)
@@ -114,7 +262,6 @@ public class AgentService {
                                 boolean isReal, boolean hasEnoughData, boolean isMock) {
         StringBuilder sb = new StringBuilder();
 
-        // Prefix with data quality disclaimer
         if (isMock) {
             sb.append("**注意：当前为模拟数据，不代表真实硬件采集结果。**\n\n");
         } else if (!isReal) {
@@ -310,5 +457,9 @@ public class AgentService {
         ctx.put("hasEnoughRealData", isReal && sensorDataService.recentBySource(normalized, 5).size() >= 5);
 
         return ctx;
+    }
+
+    public record StreamDone(String sessionId, String agentName, List<String> usedTools,
+                             String dataSource, String confidence, String createdAt) {
     }
 }
