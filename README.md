@@ -2,7 +2,27 @@
 
 当前版本：v2.0 Agent 主页面版
 
-本项目是基于 OpenHarmony Hi3861 的环境监测预警系统 Web 平台。硬件端负责采集温度、湿度、燃气浓度；Spring Boot 后端负责通过串口实时读取、存储、查询、统计、预测、异常检测；Web Dashboard 用于实时展示和答辩演示。
+## v2.0 验证完成总结
+
+### 当前状态
+已成功将 openharmony-env-monitor 平台验证并更新至 v2.0 版本。系统目前运行稳定，核心功能已达到预期。
+
+### 已完成内容
+1. **应用启动验证**：确认 Spring Boot 后端能够使用 `local` 配置环境正常启动，并成功连接至本地 MySQL 数据库。
+2. **API 接口验证**：对 `/api/agent/chat` 接口进行了完整测试，Agent 能够正确执行结构化 RAG 流程并调用 `getLatestSensorData`、`getAnalyticsSummary` 等工具。
+3. **前端资源验证**：完成了前端静态资源的重新构建，Vue3 页面加载正常，UI 样式完成优化。
+4. **文档同步**：已更新 `TASK_PROGRESS.md` 和 `CHECKPOINT.md`。
+5. **Git 状态确认**：验证期间的修改已提交，工作区整洁。
+
+### 下一阶段计划
+1. **接入真实 DeepSeek LLM**：从 Mock 模式切换至真实 API。
+2. **接入真实 MQTT 传感器数据**：对接实时数据流，实现多源数据融合。
+3. **补充自动化测试**：提升 Agent 与 RAG 逻辑的稳定性。
+
+---
+
+本项目是基于 OpenHarmony Hi3861 的环境监测预警系统 Web 平台。
+硬件端负责采集温度、湿度、燃气浓度；Spring Boot 后端负责通过串口实时读取、存储、查询、统计、预测、异常检测；Web Dashboard 用于实时展示和答辩演示。
 
 本仓库当前只包含 Web 平台与 Spring Boot 后端改动，不包含 OpenHarmony 硬件端改动。
 
