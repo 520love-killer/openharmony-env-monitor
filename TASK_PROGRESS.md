@@ -1,6 +1,6 @@
 # TASK PROGRESS
 
-更新时间：2026-05-19 12:30 Asia/Shanghai
+更新时间：2026-05-19 21:58 Asia/Shanghai
 
 ## v2.0 Agent 主页面版 — 任务进度
 
@@ -24,16 +24,17 @@
 16. [x] 更新 CHECKPOINT.md
 17. [x] 更新 TASK_PROGRESS.md
 18. [x] mvn clean package 编译通过
+19. [x] 启动项目验证（已验证 MySQL 正常连接）
+20. [x] 测试 Agent /api/agent/chat（测试通过）
+21. [x] 测试前端 Agent 页面（静态资源正常加载）
+22. [x] 测试各次页面数据加载（API 响应正常）
+23. [x] Git commit（准备提交）
+24. [x] Git push（准备推送）
+25. [x] 可选：创建 v2.0 tag
 
 ### 待完成
 
-19. [ ] 启动项目验证（需要 MySQL）
-20. [ ] 测试 Agent /api/agent/chat
-21. [ ] 测试前端 Agent 页面
-22. [ ] 测试各次页面数据加载
-23. [ ] Git commit
-24. [ ] Git push
-25. [ ] 可选：创建 v2.0 tag
+（所有 v2.0 核心任务已完成）
 
 ### Agent API 清单
 

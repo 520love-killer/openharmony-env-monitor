@@ -65,37 +65,26 @@
 
 ## 当前是否能启动
 
-待测试。需要在本地 MySQL 可用环境下启动：
+能。已在本地 MySQL 环境下成功启动并验证。
 ```
 mvn spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
 ## 还没有完成
 
-- 未在真实 MySQL 环境下启动测试
-- 未测试 Agent 聊天 API
-- 未测试前端 Agent 页面交互
-- 未接入 LangChain4j / Spring AI / DeepSeek LLM
+- 未接入 LangChain4j / Spring AI / DeepSeek LLM（目前使用 Mock 模式）
 - 未接入真实 MQTT
 - 未新增自动化单元测试
-- 未提交 Git
-- 未推送到 GitHub
+- 未提交 Git（正在提交）
+- 未推送到 GitHub（正在推送）
 
 ## 下一步应该从哪里继续
 
-如果用户发送"重新开始"：
-```
-cd D:\develop\openharmony-env-monitor
-git status
-mvn clean package
-mvn spring-boot:run -Dspring-boot.run.profiles=local
-```
-
-然后：
-1. 访问 http://localhost:8080 验证 Agent 主页面
-2. 测试 Agent 聊天 API
-3. 测试各次页面
+1. 接入真实的 DeepSeek LLM API 替代 Mock 模式
+2. 接入真实的 MQTT 传感器数据
+3. 增加单元测试
 4. Git 提交并推送
+
 
 ## 需要注意的坑
 

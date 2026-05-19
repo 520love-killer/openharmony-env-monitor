@@ -1,0 +1,1 @@
+import{h as t}from"./http-Cu-A9YGz.js";const r={latest(e){return t.get(`/api/sensor-data/latest?source=${encodeURIComponent(e)}`)},recent(e,o=50){return t.get(`/api/sensor-data/recent?limit=${o}&source=${encodeURIComponent(e)}`)}};export{r as s};
