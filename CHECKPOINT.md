@@ -1,6 +1,77 @@
 # CHECKPOINT
 
-更新时间：2026-05-19 22:15 Asia/Shanghai
+更新时间：2026-05-20 00:35 Asia/Shanghai
+
+# v2.1 DeepSeek 真模型接入 — 完成总结
+
+## 当前状态
+Agent 已成功接入真实 DeepSeek LLM。系统在检测到 API Key 时自动使用 DeepSeek 生成自然语言回答，无 Key 时自动回退 Mock 模式。v2.0 所有稳定功能保持正常。
+
+## 已完成内容
+
+### 1. DeepSeek API 接入
+- `LlmService` 调用 DeepSeek `/v1/chat/completions`（OpenAI-compatible）
+- 支持非流式 `chat()` 和流式 `streamChat()`
+- API Key 从环境变量读取，不写入代码/配置/文档
+- 请求失败（HTTP 错误、网络异常、超时）时回退 Mock
+
+### 2. RAG + Tool-Calling + LLM 工作流程
+1. 用户提问 → 后端判断需要哪些工具
+2. 调用已有工具（getLatestSensorData、getRecent50Data、getAnalyticsSummary、getTemperatureForecast、getAnomalyDetection、getDatabaseStatus）
+3. 整理工具结果 + 生成系统提示词
+4. 交给 DeepSeek 生成自然语言回答
+5. DeepSeek 不可用时回退当前 Mock / 模板回复
+6. 返回 usedTools、dataSource、confidence、mode、model
+
+### 3. 接口状态
+
+| 接口 | 状态 | 说明 |
+|------|------|------|
+| GET /api/agent/status | ✅ | 返回 mode、hasApiKey、model、ragEnabled、toolCallingEnabled |
+| POST /api/agent/chat | ✅ | 非流式对话，返回 mode/model |
+| POST /api/agent/stream | ✅ | SSE 流式输出，done 事件含 mode/model |
+
+### 4. 配置安全
+- `application.yml` 使用 `${DEEPSEEK_API_KEY:}` 占位
+- `application-local.yml` 在 `.gitignore` 中
+- 不提交 `.env`、`.env.local`、API Key
+- 日志不打印 API Key
+
+## 测试验证
+
+### Mock 模式（无 API Key）
+- 后端能正常启动
+- `/api/agent/status` → `{"mode":"mock","hasApiKey":false}`
+- `/api/agent/chat` → 结构化工具结果回复，mode=mock
+- 前端页面不报错
+
+### DeepSeek 模式（需用户自行配置 API Key 测试）
+- 设置 `$env:DEEPSEEK_API_KEY="sk-..."`
+- `/api/agent/status` → `{"mode":"deepseek","hasApiKey":true}`
+- `/api/agent/chat` → DeepSeek 生成的自然语言回答，mode=deepseek
+
+## v2.1 修改文件
+
+- `src/main/java/com/example/envmonitor/dto/AgentChatResponse.java`（新增 mode、model 字段）
+- `src/main/java/com/example/envmonitor/service/AgentService.java`（重构 LLM 调用逻辑、StreamDone 扩展 mode/model、buildAnswer 移除硬编码 Mock 文字）
+- `src/main/java/com/example/envmonitor/service/AgentPromptService.java`（优化系统提示词）
+- `src/main/resources/application.yml`（调整 agent 默认配置注释）
+- `TASK_PROGRESS.md` / `CHECKPOINT.md` / `README.md`（新增 v2.1 文档）
+
+## 已知限制
+
+- 前端 ChatMessage 类型未扩展 mode/model 字段（不影响功能，前端通过 status 接口显示当前模式）
+- DeepSeek 流式输出在极端网络异常下可能降级为 Mock 流式
+- 用户需自行配置有效 DEEPSEEK_API_KEY 才能体验真实 LLM 回答
+
+## 下一步
+
+- [x] DeepSeek LLM 接入（v2.1）
+- [ ] 接入真实 MQTT 传感器数据
+- [ ] 增加自动化单元测试
+- [ ] 向量数据库语义 RAG
+
+---
 
 # v2.0 验证完成总结
 

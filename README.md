@@ -1,6 +1,6 @@
 # OpenHarmony 环境监测预警系统 Web 平台
 
-当前版本：v2.0 Agent 主页面版
+当前版本：v2.1 DeepSeek 真模型版
 
 ## v2.0 验证完成总结
 
@@ -244,6 +244,21 @@ S_t = alpha * X_t + (1 - alpha) * S_{t-1}
 - 每天凌晨 3:00 自动清理；
 - 不删除最近 24 小时数据。
 
+## v2.1 DeepSeek 真模型版
+
+v2.1 在 v2.0 基础上将 Agent 从 Mock / 模板模式升级为真实 DeepSeek LLM 模式。
+
+### 主要变化
+
+1. Agent「温度计」在有 `DEEPSEEK_API_KEY` 时调用真实 DeepSeek LLM 生成自然语言回答
+2. 无 API Key 时自动回退 Mock 模式，系统正常运行
+3. API Key 通过环境变量读取，不写入代码/配置/文档
+4. 请求失败时自动降级，接口不崩溃
+5. 保留 7 种工具调用：getLatestSensorData、getRecent50Data、getAnalyticsSummary、getTemperatureForecast、getAnomalyDetection、getDatabaseStatus、generateReportSummary
+6. 保留结构化 RAG + 上下文记忆 + 流式输出
+7. 系统提示词优化，强调不编造数据、MOCK 数据明确标注
+8. `AgentChatResponse` 新增 `mode`（deepseek/mock）和 `model` 字段
+
 ## v2.0 Agent 主页面版
 
 v2.0 将系统从传统环境监测 Dashboard 升级为以 Agent 为核心的智能环境分析平台。
@@ -255,9 +270,8 @@ v2.0 将系统从传统环境监测 Dashboard 升级为以 Agent 为核心的智
 3. Agent 可自动调用 7 种工具：getLatestSensorData、getRecent50Data、getAnalyticsSummary、getTemperatureForecast、getAnomalyDetection、getDatabaseStatus、generateReportSummary
 4. Agent 可解释使用的算法和预测置信度
 5. Agent 可生成实验报告摘要
-6. 当前支持结构化 RAG + Tool Calling（Mock Agent），不依赖外部 API Key
-7. 后续可升级 LangChain4j / Spring AI / Kimi(Moonshot) / DeepSeek
-8. 新增会话持久化（MySQL），支持多轮对话和历史查询
+6. 支持结构化 RAG + Tool Calling + DeepSeek LLM，Mock 模式不依赖外部 API Key
+7. 新增会话持久化（MySQL），支持多轮对话和历史查询
 
 ### 页面结构
 
@@ -300,11 +314,13 @@ Mock Agent 基于真实后端接口结果生成回答，不编造数据：
 4. 不说"精准预测"，只说"短期趋势估计"
 5. 不编造数据库里不存在的数据
 
-### 接入 LLM（可选）
+### 接入 DeepSeek LLM（可选）
 
-当前 v2.0 支持两种模式：
-1. **Mock Agent**（默认）：基于后端工具调用结果生成结构化回答，不依赖外部 API
-2. **DeepSeek 流式模式**：配置 DEEPSEEK_API_KEY 后自动启用流式输出，支持多轮对话上下文记忆
+当前 v2.1 支持两种模式，自动切换：
+1. **DeepSeek 模式**（有 API Key 时自动启用）：调用真实 DeepSeek LLM 生成自然语言回答
+2. **Mock Agent**（无 API Key 时自动回退）：基于后端工具调用结果生成结构化回答
+
+配置 DeepSeek 环境变量：
 
 DeepSeek 环境变量：
 ```powershell
@@ -474,6 +490,7 @@ SELECT * FROM anomaly_record ORDER BY id DESC LIMIT 10;
 
 - [x] 串口实时读取已接入
 - [x] Agent v2.0 结构化 RAG + Tool Calling
+- [x] Agent v2.1 DeepSeek 真模型接入
 - [x] 7 种 Agent 工具、会话持久化、多轮对话
 - [x] DeepSeek 流式输出（SSE + ReadableStream）
 - [x] 多轮对话上下文记忆（localStorage + MySQL）

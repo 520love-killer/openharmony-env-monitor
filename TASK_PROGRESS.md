@@ -1,6 +1,65 @@
 # TASK PROGRESS
 
-更新时间：2026-05-19 22:15 Asia/Shanghai
+更新时间：2026-05-20 00:35 Asia/Shanghai
+
+## v2.1 DeepSeek 真模型接入 — 完成总结
+
+### 当前状态
+Agent 已从 Mock / 模板模式升级为真实 DeepSeek LLM 模式。系统在 DeepSeek 可用时调用真实大模型生成回答，不可用时自动回退 Mock 模式。
+
+### 已完成内容
+
+#### 1. DeepSeek API 接入完善
+- `LlmService` 已完整支持 DeepSeek OpenAI-compatible API（非流式 + 流式）
+- API Key 通过环境变量读取（`DEEPSEEK_API_KEY` / `AGENT_API_KEY`），不写入代码
+- 请求失败时自动降级为 Mock 结构化回复，接口不崩溃
+- 日志中不打印 API Key
+
+#### 2. Agent 响应增强
+- `AgentChatResponse` 新增 `mode`（deepseek/mock）和 `model` 字段
+- `AgentService.StreamDone` 新增 `mode` 和 `model` 字段，流式输出可透传
+- `buildAnswer()` 移除末尾硬编码的 "当前使用 Mock Agent" 文字
+- Mock 模式下回答干净，不再附加技术降级说明
+
+#### 3. 系统提示词优化
+- `AgentPromptService.buildSystemPrompt()` 重构，明确职责和行为准则
+- 强调不编造数据、真实数据不足时说明、MOCK 数据明确标注
+- 不说 "精准预测"，只说 "短期趋势估计"
+- 禁止在正文中暴露内部工具函数名
+
+#### 4. 配置安全
+- `application.yml` 中 agent 配置使用环境变量占位
+- 默认 `mode: auto`，自动检测 API Key 是否配置
+- `application-local.yml` 继续被 `.gitignore` 忽略
+
+#### 5. 测试验证
+- Mock 模式（无 API Key）：`/api/agent/status` 返回 `mode: mock`，`/api/agent/chat` 正常回复
+- 工具调用、RAG、上下文记忆功能保持正常
+- v2.0 稳定功能未被破坏
+
+### DeepSeek 环境变量配置
+
+```powershell
+$env:DEEPSEEK_API_KEY="你的 DeepSeek API Key"
+$env:DEEPSEEK_BASE_URL="https://api.deepseek.com"
+$env:DEEPSEEK_MODEL="deepseek-chat"
+```
+
+### 测试命令
+
+```powershell
+# Mock 模式（无 API Key）
+curl.exe http://localhost:8080/api/agent/status
+curl.exe -X POST http://localhost:8080/api/agent/chat -H "Content-Type: application/json" -d '{"sessionId":"test","message":"分析当前环境","source":"REAL_SERIAL"}'
+
+# DeepSeek 模式（需先设置 API Key）
+$env:DEEPSEEK_API_KEY="sk-..."
+mvn spring-boot:run -Dspring-boot.run.profiles=local
+curl.exe http://localhost:8080/api/agent/status
+curl.exe -X POST http://localhost:8080/api/agent/chat -H "Content-Type: application/json" -d '{"sessionId":"test","message":"分析当前环境","source":"REAL_SERIAL"}'
+```
+
+---
 
 ## v2.0 验证完成总结
 

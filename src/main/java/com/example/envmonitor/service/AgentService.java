@@ -66,8 +66,23 @@ public class AgentService {
         boolean hasRealData = checkRealDataAvailability(source);
 
         String structuredAnswer = buildAnswer(request.message(), toolResults, source, isReal, hasRealData, isMock);
-        String answer = maybeUseLlmWithHistory(request.message(), toolResults, structuredAnswer,
+
+        // Try DeepSeek LLM first; fall back to structured mock answer on failure or no key
+        LlmService.LlmChatResponse llmResponse = tryLlmChat(request.message(), toolResults,
             source, isReal, hasRealData, isMock, history);
+
+        String answer;
+        String mode;
+        String model;
+        if (llmResponse != null && llmResponse.success()) {
+            answer = llmResponse.content();
+            mode = "deepseek";
+            model = llmResponse.model();
+        } else {
+            answer = structuredAnswer;
+            mode = "mock";
+            model = null;
+        }
 
         agentMemoryService.saveMessage(sessionId, "agent", answer, toolNames, source, confidence);
 
@@ -78,7 +93,9 @@ public class AgentService {
             toolNames,
             source,
             confidence,
-            LocalDateTime.now().format(DT_FMT)
+            LocalDateTime.now().format(DT_FMT),
+            mode,
+            model
         );
     }
 
@@ -122,7 +139,10 @@ public class AgentService {
             source, isReal, hasRealData, isMock, history);
 
         // Try DeepSeek streaming first, fallback to mock streaming
-        if (llmService.isAvailable()) {
+        boolean llmAvailable = llmService.isAvailable();
+        String modelName = llmAvailable ? llmService.getModel() : null;
+
+        if (llmAvailable) {
             boolean streamOk = llmService.streamChat(messages,
                 chunk -> {
                     try { onChunk.accept(chunk); } catch (Exception e) { /* ignore */ }
@@ -134,11 +154,9 @@ public class AgentService {
                 }
             );
             if (streamOk) {
-                // Save the full answer (built from chunks) to database
-                // The frontend will assemble it and can save via API
                 StreamDone done = new StreamDone(sessionId, AgentPromptService.AGENT_NAME,
                     toolNames.stream().toList(), source, confidence,
-                    LocalDateTime.now().format(DT_FMT));
+                    LocalDateTime.now().format(DT_FMT), "deepseek", modelName);
                 try { onDone.accept(done); } catch (Exception e) { /* ignore */ }
                 return;
             }
@@ -148,7 +166,7 @@ public class AgentService {
         mockStreamAnswer(structuredAnswer, onChunk);
         StreamDone done = new StreamDone(sessionId, AgentPromptService.AGENT_NAME,
             toolNames.stream().toList(), source, confidence,
-            LocalDateTime.now().format(DT_FMT));
+            LocalDateTime.now().format(DT_FMT), "mock", null);
         try { onDone.accept(done); } catch (Exception e) { /* ignore */ }
     }
 
@@ -208,11 +226,11 @@ public class AgentService {
         return messages;
     }
 
-    private String maybeUseLlmWithHistory(String message, List<AgentToolResult> results, String structuredAnswer,
-                                          String source, boolean isReal, boolean hasEnoughData, boolean isMock,
-                                          List<Map<String, String>> history) {
+    private LlmService.LlmChatResponse tryLlmChat(String message, List<AgentToolResult> results,
+                                                   String source, boolean isReal, boolean hasEnoughData, boolean isMock,
+                                                   List<Map<String, String>> history) {
         if (!llmService.isAvailable()) {
-            return structuredAnswer;
+            return new LlmService.LlmChatResponse(false, "API Key 未配置，已降级为本地结构化回复。", null);
         }
 
         List<Map<String, String>> messages = new ArrayList<>();
@@ -239,13 +257,8 @@ public class AgentService {
             "content", "用户问题：" + message + "\n\n工具调用结果：\n" + summarizeToolResults(results)
                 + "\n\n请基于以上真实工具结果回答，不要编造不存在的数据。"
         ));
-        LlmService.LlmChatResponse llm = llmService.chat(messages);
-        if (llm.success()) {
-            return llm.content() + "\n\n---\n数据来源：" + source
-                + " | 使用模型：" + llm.model()
-                + " | 工具调用：" + String.join(", ", results.stream().map(AgentToolResult::toolName).toList());
-        }
-        return structuredAnswer + "\n\n---\n" + llm.content();
+
+        return llmService.chat(messages);
     }
 
     private String summarizeToolResults(List<AgentToolResult> results) {
@@ -296,8 +309,7 @@ public class AgentService {
 
         sb.append("---\n");
         sb.append("数据来源：").append(source).append(" | ");
-        sb.append("数据条数：").append(countDataPoints(results)).append(" | ");
-        sb.append("当前使用 Mock Agent（基于结构化 RAG + 工具调用），不调用外部大模型。");
+        sb.append("数据条数：").append(countDataPoints(results));
         return sb.toString();
     }
 
@@ -460,6 +472,7 @@ public class AgentService {
     }
 
     public record StreamDone(String sessionId, String agentName, List<String> usedTools,
-                             String dataSource, String confidence, String createdAt) {
+                             String dataSource, String confidence, String createdAt,
+                             String mode, String model) {
     }
 }
