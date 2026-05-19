@@ -100,6 +100,42 @@ mvn spring-boot:run -Dspring-boot.run.profiles=local
 http://localhost:8080
 ```
 
+## Vue3 前端
+
+v2.x 前端使用 Vue3 + Vite + TypeScript 重构，提供更现代的 AIoT Dashboard 和温度计 Agent 交互体验。
+
+技术栈：
+- Vue3
+- Vite
+- TypeScript
+- Vue Router（Hash 模式）
+- Pinia
+- Axios
+- ECharts
+- Marked（Markdown 渲染）
+- DeepSeek 流式输出
+- localStorage 上下文记忆
+
+开发启动：
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+前端开发服务器运行在 http://localhost:5173，通过 Vite proxy 转发 `/api` 到 Spring Boot（http://localhost:8080）。
+
+构建并集成到 Spring Boot：
+
+```bash
+cd frontend
+npm run build
+cp -r dist/* ../src/main/resources/static/
+```
+
+然后启动 Spring Boot，访问 http://localhost:8080 即可。
+
 ## 缓存技术栈
 
 本项目使用 Spring Cache + Caffeine 作为默认缓存方案，用于提升 Dashboard、统计分析、预测分析、异常检测和 Agent 上下文接口的响应速度。

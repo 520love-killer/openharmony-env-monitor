@@ -1,0 +1,1 @@
+import{h as t,t as a,e as s,a as o,z as c,_ as n}from"./index-DxqzoU0g.js";const r={class:"section-header"},_=t({__name:"SectionHeader",props:{title:{}},setup(e){return(i,d)=>(a(),s("div",r,[o("h2",null,c(e.title),1)]))}}),l=n(_,[["__scopeId","data-v-f867d86a"]]);export{l as S};

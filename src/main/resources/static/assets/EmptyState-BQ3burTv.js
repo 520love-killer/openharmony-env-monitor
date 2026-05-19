@@ -1,0 +1,1 @@
+import{h as e,t as a,e as s,a as o,z as c,_ as n}from"./index-DxqzoU0g.js";const p={class:"empty-state"},_=e({__name:"EmptyState",props:{text:{}},setup(t){return(r,m)=>(a(),s("div",p,[o("p",null,c(t.text),1)]))}}),l=n(_,[["__scopeId","data-v-9fa2a4fc"]]);export{l as E};

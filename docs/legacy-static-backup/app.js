@@ -591,15 +591,17 @@ function renderDashboardMetrics(payload) {
     grid.innerHTML = `<div class="metric-card"><span>状态</span><strong>${WAITING_TEXT}</strong></div>`;
     return;
   }
+  const temp = Number(data.temperature);
+  const tempColor = temp > 35 ? 'var(--red)' : temp > 28 ? 'var(--amber)' : 'var(--green)';
   grid.innerHTML = `
-    <div class="metric-card"><span>设备 ID</span><strong>${esc(data.deviceId)}</strong></div>
-    <div class="metric-card"><span>温度</span><strong>${fmt(data.temperature, 1, '℃')}</strong></div>
-    <div class="metric-card"><span>湿度</span><strong>${fmt(data.humidity, 1, '%')}</strong></div>
-    <div class="metric-card"><span>燃气浓度</span><strong>${fmt(data.gas, 1, 'ppm')}</strong></div>
-    <div class="metric-card"><span>安全状态</span><strong class="${data.status === 'WARNING' ? 'warning-text' : 'safe-text'}">${esc(data.status)}</strong></div>
-    <div class="metric-card"><span>数据来源</span><strong>${sourceLabel(source)}</strong></div>
-    <div class="metric-card"><span>更新时间</span><strong>${fmt(data.createdAt)}</strong></div>
-    <div class="metric-card"><span>设备连接</span><strong>${source === 'MOCK' ? '模拟演示数据' : 'Hi3861 真实设备'}</strong></div>
+    <div class="metric-card"><span>🖥 设备 ID</span><strong>${esc(data.deviceId)}</strong></div>
+    <div class="metric-card"><span>🌡 温度</span><strong style="color:${tempColor}">${fmt(data.temperature, 1, '℃')}</strong></div>
+    <div class="metric-card"><span>💧 湿度</span><strong>${fmt(data.humidity, 1, '%')}</strong></div>
+    <div class="metric-card"><span>🔥 燃气浓度</span><strong>${fmt(data.gas, 1, 'ppm')}</strong></div>
+    <div class="metric-card"><span>🛡 安全状态</span><strong class="${data.status === 'WARNING' ? 'warning-text' : 'safe-text'}">${esc(data.status)}</strong></div>
+    <div class="metric-card"><span>📡 数据来源</span><strong>${sourceLabel(source)}</strong></div>
+    <div class="metric-card"><span>🕐 更新时间</span><strong>${fmt(data.createdAt)}</strong></div>
+    <div class="metric-card"><span>🔌 设备连接</span><strong>${source === 'MOCK' ? '模拟演示数据' : 'Hi3861 真实设备'}</strong></div>
   `;
 }
 
@@ -610,7 +612,12 @@ async function refreshStatistics() {
     getJson(api.trend(currentSource), { success: false, message: '等待趋势分析结果' }),
   ]);
   const ok = summary?.success === true;
-  document.getElementById('statMessage').textContent = summary?.message ?? '等待统计分析结果';
+  const summaryEl = document.getElementById('statSummary');
+  if (ok) {
+    summaryEl.innerHTML = `<strong>分析结论：</strong>基于最近 <strong>${summary.sampleCount}</strong> 条数据，整体趋势 <strong>${esc(summary.trend)}</strong>，波动程度 <strong>${esc(summary.volatilityLevel)}</strong>。数据来源：${sourceLabel(currentSource)}。`;
+  } else {
+    summaryEl.innerHTML = `<strong>${esc(summary?.message ?? '等待统计分析结果')}</strong>`;
+  }
   document.getElementById('statGrid').innerHTML = ok ? `
     <div class="stat-card"><span>样本数</span><strong>${summary.sampleCount}</strong></div>
     <div class="stat-card"><span>平均温度</span><strong>${fmt(summary.temperatureAvg, 2, '℃')}</strong></div>
@@ -639,7 +646,12 @@ async function refreshStatistics() {
 async function refreshForecast() {
   const data = await getJson(api.forecast(currentSource), { success: false, message: '等待预测结果' });
   const ok = data?.success === true;
-  document.getElementById('forecastMessage').textContent = data?.message ?? '等待预测结果';
+  const conclusionEl = document.getElementById('forecastConclusion');
+  if (ok) {
+    conclusionEl.innerHTML = `<strong>预测结论：</strong>当前温度 <strong>${fmt(data.currentTemperature, 2, '℃')}</strong>，未来 10 分钟预计 <strong>${fmt(data.finalForecast10min, 2, '℃')}</strong>，趋势 <strong>${esc(data.trend)}</strong>（置信度：${esc(data.confidence)}）。基于 ${data.sampleCount} 条真实数据计算。`;
+  } else {
+    conclusionEl.innerHTML = `<strong>${esc(data?.message ?? '等待预测结果')}</strong>`;
+  }
   document.getElementById('forecastGrid').innerHTML = ok ? `
     <div class="stat-card"><span>当前温度</span><strong>${fmt(data.currentTemperature, 2, '℃')}</strong></div>
     <div class="stat-card"><span>未来 5 分钟</span><strong>${fmt(data.finalForecast5min, 2, '℃')}</strong></div>
@@ -649,10 +661,31 @@ async function refreshForecast() {
     <div class="stat-card"><span>样本数</span><strong>${data.sampleCount}</strong></div>
   ` : `<div class="metric-card"><span>状态</span><strong>数据不足</strong></div>`;
 
-  document.getElementById('algorithmTable').innerHTML = ok ? `
-    <div><span>滑动平均 5/10 分钟</span><strong>${fmt(data.movingAverageForecast5min, 2, '℃')} / ${fmt(data.movingAverageForecast10min, 2, '℃')}</strong></div>
-    <div><span>线性回归 5/10 分钟</span><strong>${fmt(data.linearRegressionForecast5min, 2, '℃')} / ${fmt(data.linearRegressionForecast10min, 2, '℃')}</strong></div>
-    <div><span>指数平滑 5/10 分钟</span><strong>${fmt(data.exponentialSmoothingForecast5min, 2, '℃')} / ${fmt(data.exponentialSmoothingForecast10min, 2, '℃')}</strong></div>
+  document.getElementById('algorithmCards').innerHTML = ok ? `
+    <div class="algo-card">
+      <h4>滑动平均</h4>
+      <p class="algo-desc">取最近 5 条温度平均值平滑短期波动，结合变化率推算。</p>
+      <div class="algo-values">
+        <div class="algo-value"><span>未来 5 分钟</span><strong>${fmt(data.movingAverageForecast5min, 2, '℃')}</strong></div>
+        <div class="algo-value"><span>未来 10 分钟</span><strong>${fmt(data.movingAverageForecast10min, 2, '℃')}</strong></div>
+      </div>
+    </div>
+    <div class="algo-card">
+      <h4>线性回归</h4>
+      <p class="algo-desc">使用序号作为 x、温度作为 y，计算斜率和截距，判断整体趋势。</p>
+      <div class="algo-values">
+        <div class="algo-value"><span>未来 5 分钟</span><strong>${fmt(data.linearRegressionForecast5min, 2, '℃')}</strong></div>
+        <div class="algo-value"><span>未来 10 分钟</span><strong>${fmt(data.linearRegressionForecast10min, 2, '℃')}</strong></div>
+      </div>
+    </div>
+    <div class="algo-card">
+      <h4>指数平滑</h4>
+      <p class="algo-desc">使用 EWMA（α=0.3）强调最近数据对预测的影响。</p>
+      <div class="algo-values">
+        <div class="algo-value"><span>未来 5 分钟</span><strong>${fmt(data.exponentialSmoothingForecast5min, 2, '℃')}</strong></div>
+        <div class="algo-value"><span>未来 10 分钟</span><strong>${fmt(data.exponentialSmoothingForecast10min, 2, '℃')}</strong></div>
+      </div>
+    </div>
   ` : '';
 }
 
@@ -682,6 +715,13 @@ async function refreshAnomaly() {
 async function refreshRecent() {
   const rows = await getJson(api.recent(currentSource), []);
   document.getElementById('recentSource').textContent = sourceLabel(currentSource);
+  const toolbar = document.getElementById('tableToolbar');
+  const lastTime = rows.length > 0 ? fmt(rows[0].createdAt) : '--';
+  toolbar.innerHTML = `
+    <div class="toolbar-item"><span class="toolbar-badge">${rows.length}</span> 条记录</div>
+    <div class="toolbar-item">最近更新：<strong>${lastTime}</strong></div>
+    <div class="toolbar-item">数据源：<strong>${sourceLabel(currentSource)}</strong></div>
+  `;
   document.getElementById('recentBody').innerHTML = rows.length
     ? rows.map(row => `
       <tr>
